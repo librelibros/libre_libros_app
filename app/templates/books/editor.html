@@ -1,28 +1,35 @@
 {% extends "base.html" %}
 {% set title = "Editar " ~ book.title %}
 {% block content %}
-<section class="card stack">
-  <div class="section-header">
+<section class="card stack editor-shell">
+  <div class="section-header editor-page-head">
     <div>
       <p class="eyebrow">Edición Markdown</p>
       <h2>{{ book.title }}</h2>
-      <p class="muted">Edición simplificada con vista previa, assets y ramas.</p>
+      <p class="muted">Edición comprimida para trabajar sin perder contexto: documento, vista previa y medios en una sola pantalla.</p>
     </div>
   </div>
-  <form method="post" action="/books/{{ book.id }}/edit" class="stack" data-markdown-editor enctype="multipart/form-data">
-    <label>
-      Rama de trabajo
-      <select name="branch_name">
-        {% for branch in branches %}
-        <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>
-      Mensaje de commit
-      <input type="text" name="commit_message" value="Update {{ book.title }}" />
-    </label>
-    <div class="toolbar">
+  <form method="post" action="/books/{{ book.id }}/edit" class="stack editor-form" data-markdown-editor enctype="multipart/form-data">
+    <div class="editor-command-bar">
+      <label class="editor-field editor-field-branch">
+        Rama
+        <select name="branch_name">
+          {% for branch in branches %}
+          <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="editor-field editor-field-commit">
+        Commit
+        <input type="text" name="commit_message" value="Update {{ book.title }}" />
+      </label>
+      <div class="editor-primary-actions">
+        <a class="button button-tonal" href="/books/{{ book.id }}?branch={{ selected_branch }}">Cancelar</a>
+        <button class="button" type="submit">Guardar cambios</button>
+      </div>
+    </div>
+
+    <div class="toolbar editor-toolbar">
       <button type="button" data-editor-action="heading">H2</button>
       <button type="button" data-editor-action="bold">Negrita</button>
       <button type="button" data-editor-action="italic">Cursiva</button>
@@ -32,28 +39,51 @@
       <button type="button" data-editor-action="image">Imagen</button>
       <button type="button" data-editor-action="audio">Audio</button>
     </div>
+
     <div class="editor-layout">
       <section class="editor-canvas stack" data-editor-surface>
         <div class="editor-canvas-head">
           <div>
             <p class="eyebrow">Documento</p>
-            <h3>Redacta como un lienzo de trabajo</h3>
+            <h3>Redacta sin perder el hilo</h3>
           </div>
-          <p class="muted">Puedes arrastrar imágenes al texto. Se anaden al guardado y se insertan con un bloque visual editable.</p>
+          <p class="muted">El foco principal queda en el texto. Los medios se ven aquí mismo al soltarlos y la maquetación se ajusta desde el inspector derecho.</p>
+        </div>
+        <div class="editor-summary-bar">
+          <span class="chip">Rama activa: {{ selected_branch }}</span>
+          <span class="chip">Preview paginada</span>
+          <span class="chip">Medios con arrastrar y soltar</span>
+        </div>
+        <div class="editor-inline-assets stack compact" data-inline-assets hidden>
+          <div class="editor-inline-assets-head">
+            <div>
+              <p class="eyebrow">Medios en esta edición</p>
+              <h3>Lo que acabas de soltar aparece aquí</h3>
+            </div>
+            <p class="muted">Se guardarán junto al documento y se insertan como bloques reutilizables.</p>
+          </div>
+          <div class="editor-inline-assets-list" data-inline-assets-list></div>
         </div>
         <textarea name="content" rows="28" data-editor-input>{{ content }}</textarea>
         <p class="muted editor-note">
-          Usa <code>{{ pagebreak_marker }}</code> para forzar un cambio de pagina. Las imágenes admiten presets de tamano y posicion desde la columna lateral.
+          Usa <code>{{ pagebreak_marker }}</code> para forzar un cambio de página. Las imágenes admiten presets de tamaño y posición desde el panel <strong>Medios</strong>.
         </p>
       </section>
+
       <aside class="editor-sidebar stack">
-        <div class="preview-panel">
+        <div class="editor-inspector-tabs" role="tablist" aria-label="Panel lateral del editor">
+          <button type="button" class="is-active" data-editor-tab-button="preview" aria-selected="true">Vista</button>
+          <button type="button" data-editor-tab-button="media" aria-selected="false">Medios</button>
+          <button type="button" data-editor-tab-button="library" aria-selected="false">Biblioteca</button>
+        </div>
+
+        <div class="preview-panel editor-inspector-panel" data-editor-panel="preview">
           <div class="preview-panel-head">
             <div>
               <p class="eyebrow">Vista previa</p>
               <h3>Lectura maquetada</h3>
             </div>
-            <p class="muted">Revisa jerarquia, saltos de pagina e insercion de medios mientras editas.</p>
+            <p class="muted">Revisa jerarquía, paginación y composición sin abandonar el editor.</p>
           </div>
           <div data-editor-preview>
             {% set document = preview_document %}
@@ -63,23 +93,23 @@
           </div>
         </div>
 
-        <section class="stack compact editor-assets-panel" data-media-studio>
+        <section class="stack compact editor-assets-panel editor-inspector-panel" data-media-studio data-editor-panel="media" hidden>
           <div>
-            <p class="eyebrow">Insercion visual</p>
-            <h3>Imagenes y audio</h3>
-            <p class="muted">Patron inspirado en editores documentales: selecciona un recurso, define su bloque y luego insertalo en el punto actual.</p>
+            <p class="eyebrow">Inserción visual</p>
+            <h3>Imágenes y audio</h3>
+            <p class="muted">Selecciona o suelta un recurso, ajusta bloque, alineación y tamaño, e insértalo donde estés escribiendo.</p>
           </div>
           <input type="file" name="assets" accept="image/*,audio/mpeg" multiple hidden data-asset-input />
           <div class="asset-dropzone" data-asset-dropzone tabindex="0">
-            <p><strong>Suelta archivos aqui o encima del area de texto</strong></p>
-            <p class="muted">Tambien puedes abrir el selector para preparar varios recursos.</p>
+            <p><strong>Suelta archivos aquí o encima del área de texto</strong></p>
+            <p class="muted">También puedes abrir el selector para preparar varios recursos.</p>
             <button type="button" class="button button-tonal" data-asset-picker>Elegir archivos</button>
           </div>
 
           <div class="editor-media-composer stack compact">
             <div>
               <p class="eyebrow">Bloque seleccionado</p>
-              <h3>Configurar insercion</h3>
+              <h3>Configurar inserción</h3>
             </div>
             <label>
               Recurso activo
@@ -91,7 +121,7 @@
             </label>
             <div class="grid two">
               <label>
-                Posicion
+                Posición
                 <select data-image-align>
                   <option value="center">Centrada</option>
                   <option value="left">Flotada a la izquierda</option>
@@ -99,7 +129,7 @@
                 </select>
               </label>
               <label>
-                Tamano
+                Tamaño
                 <select data-image-size>
                   <option value="100">Ancho completo</option>
                   <option value="66">Dos tercios</option>
@@ -118,82 +148,68 @@
           <div class="stack compact" data-pending-assets hidden>
             <div>
               <p class="eyebrow">Pendientes</p>
-              <h3>Se añadiran en este guardado</h3>
+              <h3>Se añadirán en este guardado</h3>
             </div>
             <div class="grid two" data-pending-assets-list></div>
           </div>
         </section>
+
+        <section class="stack compact editor-library-panel editor-inspector-panel" data-editor-panel="library" hidden>
+          <div>
+            <p class="eyebrow">Biblioteca</p>
+            <h3>Recursos disponibles en {{ selected_branch }}</h3>
+            <p class="muted">Todo el material versionado vive aquí. Puedes reutilizarlo sin bajar a otra pantalla.</p>
+          </div>
+          {% if asset_entries %}
+          <div class="stack compact editor-library-list">
+            {% for asset in asset_entries %}
+            <article class="comment stack compact asset-card">
+              <div class="comment-head">
+                <strong>{{ asset.filename }}</strong>
+                <span class="chip">{{ asset.media_type or "archivo" }}</span>
+              </div>
+              {% if asset.media_type.startswith("image/") %}
+              <img class="asset-preview" src="{{ asset.public_url }}" alt="{{ asset.filename }}" />
+              {% elif asset.media_type == "audio/mpeg" %}
+              <audio controls src="{{ asset.public_url }}"></audio>
+              {% else %}
+              <a href="{{ asset.public_url }}" target="_blank" rel="noreferrer">{{ asset.filename }}</a>
+              {% endif %}
+              <code>{{ asset.snippet }}</code>
+              <div class="actions">
+                <button
+                  type="button"
+                  class="button button-tonal"
+                  data-select-asset
+                  data-asset-filename="{{ asset.filename }}"
+                  data-asset-media-type="{{ asset.media_type }}"
+                  data-asset-snippet="{{ asset.snippet }}"
+                >
+                  Preparar bloque
+                </button>
+                <button
+                  type="button"
+                  class="button button-tonal"
+                  data-insert-asset
+                  data-asset-filename="{{ asset.filename }}"
+                  data-asset-media-type="{{ asset.media_type }}"
+                  data-asset-snippet="{{ asset.snippet }}"
+                >
+                  Insertar en el editor
+                </button>
+                <button type="button" class="button button-tonal" data-copy-text="{{ asset.snippet }}">Copiar snippet</button>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="muted">Todavía no hay recursos en esta rama. Sube una imagen o un audio para reutilizarlo en el libro.</p>
+          {% endif %}
+        </section>
       </aside>
-    </div>
-    <div class="actions">
-      <button class="button" type="submit">Guardar cambios</button>
-      <a class="button button-tonal" href="/books/{{ book.id }}?branch={{ selected_branch }}">Cancelar</a>
     </div>
     <input type="hidden" name="book_id" value="{{ book.id }}" data-editor-book-id />
     <input type="hidden" name="preview_branch_name" value="{{ selected_branch }}" data-editor-branch />
   </form>
-</section>
-
-<section class="card stack">
-  <div class="section-header">
-    <div>
-      <p class="eyebrow">Biblioteca</p>
-      <h2>Recursos disponibles en {{ selected_branch }}</h2>
-    </div>
-  </div>
-  <p class="muted">
-    Puedes seguir reutilizando los recursos ya guardados insertando su snippet directamente en el editor.
-  </p>
-  <div class="stack compact">
-    <div>
-      <p class="eyebrow">Recursos versionados</p>
-      <h3>Assets ya presentes en la rama</h3>
-    </div>
-    {% if asset_entries %}
-    <div class="grid two">
-      {% for asset in asset_entries %}
-      <article class="comment stack compact asset-card">
-        <div class="comment-head">
-          <strong>{{ asset.filename }}</strong>
-          <span class="chip">{{ asset.media_type or "archivo" }}</span>
-        </div>
-        {% if asset.media_type.startswith("image/") %}
-        <img class="asset-preview" src="{{ asset.public_url }}" alt="{{ asset.filename }}" />
-        {% elif asset.media_type == "audio/mpeg" %}
-        <audio controls src="{{ asset.public_url }}"></audio>
-        {% else %}
-        <a href="{{ asset.public_url }}" target="_blank" rel="noreferrer">{{ asset.filename }}</a>
-        {% endif %}
-        <code>{{ asset.snippet }}</code>
-        <div class="actions">
-          <button
-            type="button"
-            class="button button-tonal"
-            data-select-asset
-            data-asset-filename="{{ asset.filename }}"
-            data-asset-media-type="{{ asset.media_type }}"
-            data-asset-snippet="{{ asset.snippet }}"
-          >
-            Preparar bloque
-          </button>
-          <button
-            type="button"
-            class="button button-tonal"
-            data-insert-asset
-            data-asset-filename="{{ asset.filename }}"
-            data-asset-media-type="{{ asset.media_type }}"
-            data-asset-snippet="{{ asset.snippet }}"
-          >
-            Insertar en el editor
-          </button>
-          <button type="button" class="button button-tonal" data-copy-text="{{ asset.snippet }}">Copiar snippet</button>
-        </div>
-      </article>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="muted">Todavia no hay recursos en esta rama. Sube una imagen o un audio para reutilizarlo en el libro.</p>
-    {% endif %}
-  </div>
 </section>
 {% endblock %}

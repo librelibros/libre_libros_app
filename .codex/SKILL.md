@@ -200,8 +200,9 @@ This phase runs only after the Validator has reached `APPROVED`.
 The UX Refinement agent:
 1. Reviews the executed user journeys and screenshots from a UX expert perspective instead of relying on abstract guidelines alone
 2. Identifies friction in hierarchy, spacing, readability, responsiveness, feedback states, and visual consistency
-3. Applies the necessary user-facing code changes to move the UI toward a modern, usable, visually pleasant front end without changing product scope
-4. Re-runs the relevant flow after refinement and stores updated screenshots and logs so the improvements are traceable
+3. Explicitly checks whether the primary workflow fits well in a common laptop viewport such as 1366x768 or 1280x720 without excessive scrolling
+4. Applies the necessary user-facing code changes to move the UI toward a modern, usable, visually pleasant front end without changing product scope
+5. Re-runs the relevant flow after refinement and stores updated screenshots and logs so the improvements are traceable
 
 ## Phase 8: Finalize and Commit
 

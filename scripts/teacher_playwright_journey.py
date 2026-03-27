@@ -127,8 +127,24 @@ def write_sample_png(output_dir: Path) -> Path:
     return sample
 
 
-def screenshot(page: Page, output_dir: Path, name: str) -> None:
-    page.screenshot(path=str(output_dir / f"{name}.png"), full_page=True)
+def screenshot(page: Page, output_dir: Path, name: str, *, full_page: bool = True) -> None:
+    page.screenshot(path=str(output_dir / f"{name}.png"), full_page=full_page)
+
+
+def drop_file(page: Page, selector: str, file_path: Path, mime_type: str) -> None:
+    payload = base64.b64encode(file_path.read_bytes()).decode("ascii")
+    data_transfer = page.evaluate_handle(
+        """async ({name, mimeType, payload}) => {
+          const binary = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
+          const file = new File([binary], name, { type: mimeType });
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          return dataTransfer;
+        }""",
+        {"name": file_path.name, "mimeType": mime_type, "payload": payload},
+    )
+    page.locator(selector).dispatch_event("dragover", {"dataTransfer": data_transfer})
+    page.locator(selector).dispatch_event("drop", {"dataTransfer": data_transfer})
 
 
 def update_textarea(page: Page, replacement_marker: str) -> None:
@@ -158,7 +174,7 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=not headed)
-        page = browser.new_page(viewport={"width": 1440, "height": 1400})
+        page = browser.new_page(viewport={"width": 1366, "height": 768})
         page.on("console", lambda msg: browser_errors.append(f"[console:{msg.type}] {msg.text}") if msg.type == "error" else None)
         page.on("pageerror", lambda exc: browser_errors.append(f"[pageerror] {exc}"))
 
@@ -190,15 +206,19 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
 
         page.get_by_role("link", name="Editar").click()
         page.wait_for_load_state("networkidle")
-        page.get_by_label("Rama de trabajo").select_option("users/ana-profe")
-        page.locator("[data-asset-input]").set_input_files(str(upload_file))
-        expect(page.get_by_text("Se añadiran en este guardado")).to_be_visible()
+        page.get_by_label("Rama").select_option("users/ana-profe")
+        drop_file(page, "[data-editor-surface]", upload_file, "image/png")
+        expect(page.get_by_text("Se añadirán en este guardado")).to_be_visible()
         expect(page.locator("[data-selected-asset-name]")).to_have_value("foto-de-clase.png")
+        expect(page.locator("[data-inline-assets] img")).to_be_visible()
         page.get_by_label("Texto alternativo").fill("Foto de clase")
-        page.get_by_label("Posicion").select_option("right")
-        page.get_by_label("Tamano").select_option("50")
-        screenshot(page, output_dir, "05-editor-assets")
-        observations.append(Observation("Preparar recurso", "La profesora arrastra o selecciona una imagen y define su bloque visual antes de guardar."))
+        page.get_by_label("Posición").select_option("right")
+        page.get_by_label("Tamaño").select_option("50")
+        screenshot(page, output_dir, "05-editor-assets", full_page=False)
+        observations.append(Observation("Preparar recurso", "La profesora arrastra una imagen al lienzo, la ve de inmediato en el editor y ajusta su bloque visual antes de guardar."))
+
+        page.get_by_role("button", name="Vista").click()
+        expect(page.get_by_alt_text("Foto de clase").first).to_be_visible()
 
         textarea = page.locator("[data-editor-input]")
         textarea.evaluate(
@@ -211,8 +231,8 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
             }"""
         )
         update_textarea(page, "![Foto de clase](assets/foto-de-clase.png){: .doc-image .doc-align-right .doc-w-50}")
-        page.get_by_label("Mensaje de commit").fill("Adaptacion docente del proyecto lector")
-        screenshot(page, output_dir, "06-editor-content")
+        page.get_by_label("Commit").fill("Adaptacion docente del proyecto lector")
+        screenshot(page, output_dir, "06-editor-content", full_page=False)
         page.get_by_role("button", name="Guardar cambios").click()
         page.wait_for_load_state("networkidle")
         expect(page.get_by_text("Cambios guardados en la rama users/ana-profe.")).to_be_visible()

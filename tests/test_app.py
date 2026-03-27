@@ -147,8 +147,10 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Recursos disponibles en main" in response.text
     assert "cover.svg" in response.text
     assert "Preparar bloque" in response.text
-    assert "Configurar insercion" in response.text
-    assert "Suelta archivos aqui o encima del area de texto" in response.text
+    assert "Configurar inserción" in response.text
+    assert "Suelta archivos aquí o encima del área de texto" in response.text
+    assert "Lo que acabas de soltar aparece aquí" in response.text
+    assert 'data-editor-tab-button="library"' in response.text
 
 
 def test_editor_save_persists_uploaded_assets_in_repository(tmp_path: Path):
@@ -278,5 +280,4 @@ def test_public_book_edit_link_falls_back_to_teacher_branch(tmp_path: Path):
 
     response = client.get("/books/1/edit?branch=main")
     assert response.status_code == 200
-    assert "Rama de trabajo" in response.text
     assert "users/ana-profe" in response.text

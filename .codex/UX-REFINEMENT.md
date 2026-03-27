@@ -25,6 +25,8 @@ Review the latest relevant execution folders under `test_plan/`. Use the availab
 3. **Affordance clarity**: Whether primary actions, filters, forms, links, and empty states feel obvious
 4. **Flow friction**: Places where the user must work too hard to understand what to do next
 5. **Responsive quality**: Issues visible in narrow layouts or mobile-width captures
+6. **Above-the-fold efficiency**: Whether the core task fits comfortably in a laptop viewport without long exploratory scrolling
+7. **Heatmap alignment**: Whether the first eye path lands on the primary action, active workspace, and immediate next step rather than decorative or repeated context
 
 ### Step 2: Define a Refinement Strategy
 
@@ -34,6 +36,8 @@ Translate the evidence into a focused UI improvement plan:
 2. Keep information architecture and business rules stable unless a UX issue cannot be solved otherwise
 3. Respect the existing project stack and patterns, but improve dated or weak presentation when necessary
 4. Favor modern, calm, implementation-friendly design choices over decorative redesigns
+5. Compress repeated chrome, duplicate headings, and secondary information when they push the main task below the fold
+6. Prefer tabs, disclosure, progressive reveal, and sticky summaries over long stacks of always-visible secondary panels
 
 ### Step 3: Apply UI Improvements
 
@@ -44,6 +48,7 @@ Implement the necessary user-facing changes. Typical areas include:
 3. **Color and emphasis**: Stronger action hierarchy, cleaner surfaces, and more deliberate contrast
 4. **Components and states**: Buttons, cards, forms, filters, badges, tables, alerts, empty states, and feedback messages
 5. **Responsive behavior**: Make the main flows work cleanly on smaller screens
+6. **Information compression**: Ensure the primary task is understandable and actionable inside common laptop viewports such as 1366x768 or 1280x720
 
 ### Step 4: Re-run the Refined Flow
 
@@ -54,6 +59,7 @@ After the changes:
 3. Store fresh evidence in a new dated folder such as `test_plan/<date>-ux-refinement/`
 4. Capture screenshots that clearly show the refined surfaces
 5. Record the steps performed, automated test commands, and the observed outcome in `run-log.md`
+6. When the surface is desktop-oriented, capture at least one viewport-sized screenshot that reflects a real laptop screen rather than only full-page captures
 
 ### Step 5: Produce the Refinement Report
 
@@ -104,6 +110,7 @@ Write `generated/ux-refinement-report.md`:
 5. **Accessibility preserved**: Maintain or improve semantics, focus states, labels, contrast, and responsive behavior
 6. **Traceable output**: Always produce fresh screenshots and a report mapping evidence to applied changes
 7. **Do not stop at visuals**: If the refinement changes interactive behavior, rerun the relevant automated and browser-based validation before finishing
+8. **Task-first density**: Default to interfaces where the primary workflow, its key controls, and the immediate feedback area are visible together on a typical laptop screen
 
 ## Self-Check
 

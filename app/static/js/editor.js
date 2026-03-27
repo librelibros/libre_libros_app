@@ -39,6 +39,7 @@ async function refreshPreview(form) {
   const response = await fetch("/books/preview", { method: "POST", body });
   preview.innerHTML = await response.text();
   initializeBookDocuments(preview);
+  hydrateDraftAssetsInPreview(form);
 }
 
 function slugifyName(value) {
@@ -172,6 +173,79 @@ function getMediaOptions(form) {
   };
 }
 
+function assetIdentity(asset) {
+  return `${sanitizeAssetFilename(asset?.filename || "")}:${asset?.mediaType || ""}:${asset?.source || ""}`;
+}
+
+function extractAssetFilenameFromUrl(url) {
+  try {
+    const normalized = new URL(url, window.location.origin);
+    return sanitizeAssetFilename(normalized.pathname.split("/").pop() || "");
+  } catch (_error) {
+    return sanitizeAssetFilename((url || "").split("?")[0].split("/").pop() || "");
+  }
+}
+
+function createObjectUrlForFile(form, file) {
+  const key = `${file.name}:${file.size}:${file.lastModified}`;
+  const state = form._editorState;
+  if (!state.objectUrls.has(key)) {
+    state.objectUrls.set(key, URL.createObjectURL(file));
+  }
+  return state.objectUrls.get(key);
+}
+
+function syncObjectUrls(form) {
+  const state = form._editorState;
+  const activeKeys = new Set([...state.transfer.files].map((file) => `${file.name}:${file.size}:${file.lastModified}`));
+  [...state.objectUrls.keys()].forEach((key) => {
+    if (!activeKeys.has(key)) {
+      URL.revokeObjectURL(state.objectUrls.get(key));
+      state.objectUrls.delete(key);
+    }
+  });
+}
+
+function buildPendingAssetUrlMap(form) {
+  const urlMap = new Map();
+  [...form._editorState.transfer.files].forEach((file) => {
+    urlMap.set(sanitizeAssetFilename(file.name), createObjectUrlForFile(form, file));
+  });
+  return urlMap;
+}
+
+function hydrateDraftAssetsInPreview(form) {
+  const preview = form.querySelector("[data-editor-preview]");
+  if (!preview) return;
+
+  const assetUrls = buildPendingAssetUrlMap(form);
+  if (!assetUrls.size) return;
+
+  preview.querySelectorAll("img[src]").forEach((image) => {
+    const filename = extractAssetFilenameFromUrl(image.getAttribute("src") || "");
+    const objectUrl = assetUrls.get(filename);
+    if (objectUrl) image.src = objectUrl;
+  });
+
+  preview.querySelectorAll("audio[src]").forEach((audio) => {
+    const filename = extractAssetFilenameFromUrl(audio.getAttribute("src") || "");
+    const objectUrl = assetUrls.get(filename);
+    if (objectUrl) audio.src = objectUrl;
+  });
+}
+
+function setEditorTab(form, tabName) {
+  form._editorState.activeTab = tabName;
+  form.querySelectorAll("[data-editor-tab-button]").forEach((button) => {
+    const isActive = button.dataset.editorTabButton === tabName;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+  form.querySelectorAll("[data-editor-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.editorPanel !== tabName;
+  });
+}
+
 function renderSelectedAsset(form) {
   const state = form._editorState;
   const nameInput = form.querySelector("[data-selected-asset-name]");
@@ -202,19 +276,20 @@ function renderSelectedAsset(form) {
     altInput.disabled = false;
     alignInput.disabled = false;
     sizeInput.disabled = false;
-    hint.textContent = "La imagen se insertara con clases de maquetacion para moverla a izquierda, derecha o centrarla y ajustar su ancho.";
+    hint.textContent = "La imagen se insertará con clases de maquetación para moverla a izquierda, derecha o centrarla y ajustar su ancho.";
   } else {
     altInput.value = "";
     altInput.disabled = true;
     alignInput.disabled = true;
     sizeInput.disabled = true;
-    hint.textContent = "Los audios se insertan como bloque de reproduccion. Las opciones de posicion y tamano no se aplican.";
+    hint.textContent = "Los audios se insertan como bloque de reproducción. Las opciones de posición y tamaño no se aplican.";
   }
 }
 
 function setSelectedAsset(form, asset) {
   form._editorState.selectedAsset = asset;
   renderSelectedAsset(form);
+  renderInlineAssets(form);
 }
 
 function insertSelectedAsset(form, textarea, assetOverride = null) {
@@ -231,6 +306,93 @@ function syncTransferToInput(form) {
   input.files = form._editorState.transfer.files;
 }
 
+function renderInlineAssets(form) {
+  const state = form._editorState;
+  const container = form.querySelector("[data-inline-assets]");
+  const list = form.querySelector("[data-inline-assets-list]");
+  const textarea = form.querySelector("[data-editor-input]");
+  if (!container || !list || !textarea) return;
+
+  const files = [...state.transfer.files];
+  container.hidden = files.length === 0;
+  list.innerHTML = "";
+
+  const mediaOptions = getMediaOptions(form);
+
+  files.forEach((file) => {
+    const asset = {
+      filename: file.name,
+      mediaType: file.type || "",
+      source: "pending",
+    };
+
+    const card = document.createElement("article");
+    card.className = "editor-inline-asset";
+    if (state.selectedAsset && assetIdentity(state.selectedAsset) === assetIdentity(asset)) {
+      card.classList.add("is-selected");
+    }
+
+    if (file.type.startsWith("image/")) {
+      const image = document.createElement("img");
+      image.className = "editor-inline-asset-thumb";
+      image.alt = file.name;
+      image.src = createObjectUrlForFile(form, file);
+      card.append(image);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "editor-inline-asset-meta";
+    const title = document.createElement("strong");
+    title.textContent = sanitizeAssetFilename(file.name);
+    meta.append(title);
+
+    const chips = document.createElement("div");
+    chips.className = "chip-group";
+    const mediaChip = document.createElement("span");
+    mediaChip.className = "chip";
+    mediaChip.textContent = file.type || "archivo";
+    chips.append(mediaChip);
+
+    if (file.type.startsWith("image/")) {
+      const alignChip = document.createElement("span");
+      alignChip.className = "chip";
+      alignChip.textContent = `Alineación ${mediaOptions.align}`;
+      const sizeChip = document.createElement("span");
+      sizeChip.className = "chip";
+      sizeChip.textContent = `${mediaOptions.size}%`;
+      chips.append(alignChip, sizeChip);
+    }
+
+    meta.append(chips);
+    card.append(meta);
+
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "editor-inline-asset-actions";
+
+    const prepareButton = document.createElement("button");
+    prepareButton.type = "button";
+    prepareButton.className = "button button-tonal";
+    prepareButton.textContent = "Preparar";
+    prepareButton.addEventListener("click", () => {
+      setSelectedAsset(form, asset);
+      setEditorTab(form, "media");
+    });
+
+    const insertButton = document.createElement("button");
+    insertButton.type = "button";
+    insertButton.className = "button button-tonal";
+    insertButton.textContent = "Insertar";
+    insertButton.addEventListener("click", () => {
+      setSelectedAsset(form, asset);
+      insertSelectedAsset(form, textarea, asset);
+    });
+
+    actionsRow.append(prepareButton, insertButton);
+    card.append(actionsRow);
+    list.append(card);
+  });
+}
+
 function renderPendingAssets(form, textarea) {
   const state = form._editorState;
   const pending = form.querySelector("[data-pending-assets]");
@@ -238,6 +400,7 @@ function renderPendingAssets(form, textarea) {
   if (!pending || !list) return;
 
   const files = [...state.transfer.files];
+  syncObjectUrls(form);
   pending.hidden = files.length === 0;
   list.innerHTML = "";
 
@@ -266,7 +429,7 @@ function renderPendingAssets(form, textarea) {
       const image = document.createElement("img");
       image.className = "asset-preview";
       image.alt = file.name;
-      image.src = URL.createObjectURL(file);
+      image.src = createObjectUrlForFile(form, file);
       card.append(image);
     }
 
@@ -314,6 +477,9 @@ function renderPendingAssets(form, textarea) {
     card.append(actionsRow);
     list.append(card);
   });
+
+  renderInlineAssets(form);
+  hydrateDraftAssetsInPreview(form);
 }
 
 function appendFilesToEditor(form, textarea, files, options = {}) {
@@ -358,21 +524,26 @@ function initializeMediaStudio(form, textarea) {
 
   form._editorState = {
     transfer: new DataTransfer(),
+    objectUrls: new Map(),
     selectedAsset: null,
+    activeTab: "preview",
   };
 
   function handleFileDrop(files) {
     appendFilesToEditor(form, textarea, files);
+    setEditorTab(form, "media");
   }
 
   picker?.addEventListener("click", () => input?.click());
   input?.addEventListener("change", () => {
     appendFilesToEditor(form, textarea, input.files);
+    setEditorTab(form, "media");
   });
 
   [dropzone, surface, textarea].forEach((target) => {
     target?.addEventListener("dragover", (event) => {
       event.preventDefault();
+      event.stopPropagation();
       surface?.classList.add("is-dragover");
       dropzone?.classList.add("is-dragover");
     });
@@ -382,6 +553,7 @@ function initializeMediaStudio(form, textarea) {
     });
     target?.addEventListener("drop", (event) => {
       event.preventDefault();
+      event.stopPropagation();
       surface?.classList.remove("is-dragover");
       dropzone?.classList.remove("is-dragover");
       handleFileDrop(event.dataTransfer?.files || []);
@@ -405,10 +577,16 @@ function initializeMediaStudio(form, textarea) {
     await copyText(buildAssetSnippet(asset, getMediaOptions(form)));
   });
 
+  form.querySelectorAll("[data-editor-tab-button]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setEditorTab(form, button.dataset.editorTabButton || "preview");
+    });
+  });
+
   form.querySelectorAll("[data-select-asset]").forEach((button) => {
     button.addEventListener("click", () => {
       setSelectedAsset(form, assetFromButton(button));
-      form.querySelector("[data-media-studio]")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setEditorTab(form, "media");
     });
   });
 
@@ -420,6 +598,22 @@ function initializeMediaStudio(form, textarea) {
     });
   });
 
+  [
+    form.querySelector("[data-image-alt]"),
+    form.querySelector("[data-image-align]"),
+    form.querySelector("[data-image-size]"),
+  ].forEach((control) => {
+    control?.addEventListener("input", () => {
+      renderPendingAssets(form, textarea);
+      renderSelectedAsset(form);
+    });
+    control?.addEventListener("change", () => {
+      renderPendingAssets(form, textarea);
+      renderSelectedAsset(form);
+    });
+  });
+
+  setEditorTab(form, "preview");
   renderSelectedAsset(form);
   renderPendingAssets(form, textarea);
 }
@@ -441,6 +635,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if (selectedAsset) {
             insertSelectedAsset(form, textarea, selectedAsset);
           } else {
+            setEditorTab(form, "media");
             form.querySelector("[data-asset-picker]")?.click();
           }
           return;
