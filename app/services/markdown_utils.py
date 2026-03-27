@@ -3,13 +3,14 @@ import re
 import bleach
 from slugify import slugify
 
-from app.services.books import PAGEBREAK_PATTERN, render_markdown_html
+from app.services.book_content import render_rich_markdown_html
+from app.services.books import PAGEBREAK_PATTERN
 
 PAGEBREAK_MARKER = "<!-- pagebreak -->"
 HEADING_PATTERN = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.*?)(?:\s+\{#(?P<anchor>[A-Za-z0-9\-_]+)\})?\s*$")
 
 ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS.union(
-    {"p", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "span", "img", "audio", "source"}
+    {"p", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "span", "img", "audio", "source", "div"}
 )
 ALLOWED_ATTRIBUTES = {
     "*": ["class", "id"],
@@ -20,8 +21,8 @@ ALLOWED_ATTRIBUTES = {
 }
 
 
-def markdown_preview(content: str) -> str:
-    html = render_markdown_html(content)
+def markdown_preview(content: str, worksheet_url_builder=None) -> str:
+    html = render_rich_markdown_html(content, worksheet_url_builder=worksheet_url_builder)
     return bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
 
 
@@ -33,7 +34,14 @@ def build_book_document(content: str, book_id: int | None = None, branch_name: s
 
     for page_number, page_markdown in enumerate(page_chunks, start=1):
         prepared_markdown, page_toc, page_label = _prepare_page_markdown(page_markdown, page_number, used_anchors)
-        html = markdown_preview(prepared_markdown)
+        html = markdown_preview(
+            prepared_markdown,
+            worksheet_url_builder=(
+                (lambda worksheet_slug, current_book_id=book_id, current_branch=branch_name: _worksheet_url(current_book_id, worksheet_slug, current_branch))
+                if book_id and branch_name
+                else None
+            ),
+        )
         if book_id and branch_name:
             html = _rewrite_book_asset_urls(html, book_id=book_id, branch_name=branch_name)
         pages.append(
@@ -54,7 +62,10 @@ def build_book_document(content: str, book_id: int | None = None, branch_name: s
 
 
 def book_markdown_preview(content: str, book_id: int, branch_name: str) -> str:
-    html = markdown_preview(content)
+    html = markdown_preview(
+        content,
+        worksheet_url_builder=lambda worksheet_slug: _worksheet_url(book_id, worksheet_slug, branch_name),
+    )
     return _rewrite_book_asset_urls(html, book_id=book_id, branch_name=branch_name)
 
 
@@ -110,3 +121,7 @@ def _rewrite_book_asset_urls(html: str, book_id: int, branch_name: str) -> str:
         return f'{match.group("attr")}="/books/{book_id}/{rel_path}?branch={branch_name}"'
 
     return asset_pattern.sub(replace, html)
+
+
+def _worksheet_url(book_id: int, worksheet_slug: str, branch_name: str) -> str:
+    return f"/books/{book_id}/worksheets/{worksheet_slug}?branch={branch_name}"

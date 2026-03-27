@@ -14,6 +14,7 @@ from slugify import slugify
 from svglib.svglib import svg2rlg
 
 from app.models import Book
+from app.services.book_content import flatten_rich_markdown_for_pdf
 
 PAGEBREAK_PATTERN = re.compile(r"^\s*(?:<!--\s*pagebreak\s*-->|\[\[pagebreak\]\])\s*$", re.IGNORECASE | re.MULTILINE)
 MARKDOWN_IMAGE_PATTERN = re.compile(
@@ -60,7 +61,7 @@ def export_markdown_to_pdf(
     image_max_width = doc.width
     image_max_height = doc.height * 0.42
 
-    for raw_line in content.splitlines():
+    for raw_line in flatten_rich_markdown_for_pdf(content).splitlines():
         line = raw_line.strip()
         if PAGEBREAK_PATTERN.match(line):
             story.append(PageBreak())

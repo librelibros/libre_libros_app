@@ -6,6 +6,7 @@ const actions = {
   quote: "> cita",
   pagebreak: "\n\n<!-- pagebreak -->\n\n",
   audio: '<audio controls src="assets/audio.mp3"></audio>',
+  worksheet: "[[worksheet:slug-de-la-ficha|Ir a la ficha]]",
 };
 
 function insertSnippet(textarea, snippet) {
@@ -88,6 +89,15 @@ function buildAssetSnippet(asset, options = {}) {
     return buildAudioSnippet(asset.filename);
   }
   return asset.rawSnippet || `[${asset.filename}](assets/${sanitizeAssetFilename(asset.filename)})`;
+}
+
+function buildColumnsSnippet(columnCount) {
+  const totalColumns = columnCount === 3 ? 3 : 2;
+  const blocks = Array.from({ length: totalColumns }, (_value, index) => {
+    const currentColumn = index + 1;
+    return `### Columna ${currentColumn}\n\nEscribe aqui el contenido de la columna ${currentColumn}.`;
+  });
+  return `[[columns:${totalColumns}]]\n${blocks.join("\n[[col]]\n")}\n[[/columns]]`;
 }
 
 function setActivePage(container, nextPageNumber, anchorId = null) {
@@ -598,6 +608,13 @@ function initializeMediaStudio(form, textarea) {
     });
   });
 
+  form.querySelectorAll("[data-insert-worksheet]").forEach((button) => {
+    button.addEventListener("click", () => {
+      insertSnippet(textarea, `\n\n${button.dataset.worksheetSnippet || actions.worksheet}\n\n`);
+      setEditorTab(form, "preview");
+    });
+  });
+
   [
     form.querySelector("[data-image-alt]"),
     form.querySelector("[data-image-align]"),
@@ -630,6 +647,14 @@ document.addEventListener("DOMContentLoaded", () => {
     form.querySelectorAll("[data-editor-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const action = button.dataset.editorAction;
+        if (action === "columns-2") {
+          insertSnippet(textarea, `\n\n${buildColumnsSnippet(2)}\n\n`);
+          return;
+        }
+        if (action === "columns-3") {
+          insertSnippet(textarea, `\n\n${buildColumnsSnippet(3)}\n\n`);
+          return;
+        }
         if (action === "image") {
           const selectedAsset = form._editorState?.selectedAsset;
           if (selectedAsset) {

@@ -204,7 +204,7 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
         screenshot(page, output_dir, "04-book-detail")
         observations.append(Observation("Consultar libro", "El libro se abre con indice, paginacion y contenido navegable."))
 
-        page.get_by_role("link", name="Editar").click()
+        page.get_by_role("link", name="Editar").first.click()
         page.wait_for_load_state("networkidle")
         page.get_by_label("Rama").select_option("users/ana-profe")
         drop_file(page, "[data-editor-surface]", upload_file, "image/png")

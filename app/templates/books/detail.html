@@ -24,13 +24,55 @@
         {% endfor %}
       </select>
     </label>
-    {% if user %}
-    <a class="button" href="/books/{{ book.id }}/edit?branch={{ selected_branch }}">Editar</a>
+    {% if user and edit_branch %}
+    <a class="button" href="/books/{{ book.id }}/edit?branch={{ edit_branch }}">Editar</a>
     <a class="button button-tonal" href="/books/{{ book.id }}/export/pdf?branch={{ selected_branch }}">Exportar PDF</a>
     {% endif %}
   </form>
 
   {% include "books/_document.html" %}
+</section>
+
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Fichas</p>
+      <h2>Fichas de contenido asociadas</h2>
+    </div>
+    {% if user and edit_branch %}
+    <form method="post" action="/books/{{ book.id }}/worksheets/new" class="inline-form">
+      <input type="hidden" name="branch_name" value="{{ edit_branch }}" />
+      <label>
+        Nueva ficha
+        <input type="text" name="title" placeholder="Ficha de refuerzo" required />
+      </label>
+      <button class="button" type="submit">Crear ficha</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if worksheet_entries %}
+  <div class="grid two">
+    {% for worksheet in worksheet_entries %}
+    <article class="comment stack compact worksheet-card">
+      <div class="comment-head">
+        <strong>{{ worksheet.title }}</strong>
+        <span class="chip">ficha</span>
+      </div>
+      {% if worksheet.summary %}
+      <p class="muted">{{ worksheet.summary }}</p>
+      {% endif %}
+      <div class="actions">
+        <a class="button button-tonal" href="{{ worksheet.detail_url }}">Abrir</a>
+        {% if user and edit_branch %}
+        <a class="button" href="{{ worksheet.edit_url }}">Editar</a>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Todavía no hay fichas asociadas a este libro.</p>
+  {% endif %}
 </section>
 
 <section class="grid two">
@@ -63,6 +105,11 @@
           <span class="chip">{{ comment.branch_name }}</span>
           {% if comment.anchor %}
           <span class="chip">{{ comment.anchor }}</span>
+          {% endif %}
+          {% if user and (user.global_role.value == "admin" or user.id == comment.author_id) %}
+          <form method="post" action="/books/{{ book.id }}/comments/{{ comment.id }}/delete">
+            <button class="button button-tonal" type="submit">Eliminar</button>
+          </form>
           {% endif %}
         </div>
         <p>{{ comment.body }}</p>

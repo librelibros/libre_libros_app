@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -12,6 +13,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_user
 from app.models import Book, BookComment, GlobalRole, Organization, RepositorySource, ReviewKind, ReviewRequest, ReviewStatus, User, Visibility
+from app.services.book_content import worksheet_snippet
 from app.services.books import default_book_paths, export_markdown_to_pdf, sanitize_filename
 from app.services.markdown_utils import PAGEBREAK_MARKER, build_book_document, markdown_preview
 from app.services.permissions import available_branches_for_book, can_edit_book_on_branch, can_view_book
@@ -59,6 +61,80 @@ def _asset_entries(book: Book, branch_name: str) -> list[dict[str, str]]:
             }
         )
     return entries
+
+
+def _book_directory(book: Book) -> str:
+    return Path(book.content_path).parent.as_posix()
+
+
+def _worksheets_directory(book: Book) -> str:
+    return f"{_book_directory(book)}/worksheets"
+
+
+def _worksheet_rel_path(book: Book, worksheet_slug: str) -> str:
+    return f"{_worksheets_directory(book)}/{worksheet_slug}.md"
+
+
+def _extract_document_title(content: str, fallback: str) -> str:
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if line.startswith("# "):
+            return line[2:].strip() or fallback
+    return fallback
+
+
+def _extract_document_summary(content: str) -> str | None:
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#") or line.startswith("![") or line.startswith("- ") or line.startswith("[["):
+            continue
+        return line[:220]
+    return None
+
+
+def _worksheet_entries(book: Book, branch_name: str) -> list[dict[str, str]]:
+    repo = repository_client_for(book.repository_source)
+    entries: list[dict[str, str]] = []
+    for rel_path in sorted(repo.list_files(_worksheets_directory(book), branch_name)):
+        if not rel_path.endswith(".md"):
+            continue
+        slug = Path(rel_path).stem
+        content = repo.read_text(rel_path, branch_name)
+        title = _extract_document_title(content, slug.replace("-", " ").title())
+        entries.append(
+            {
+                "slug": slug,
+                "title": title,
+                "summary": _extract_document_summary(content),
+                "detail_url": f"/books/{book.id}/worksheets/{slug}?branch={branch_name}",
+                "edit_url": f"/books/{book.id}/worksheets/{slug}/edit?branch={branch_name}",
+                "snippet": worksheet_snippet(slug, title),
+            }
+        )
+    return entries
+
+
+def _worksheet_content_template(title: str) -> str:
+    return (
+        f"# {title}\n\n"
+        "## Objetivo\n\n"
+        "Completa la ficha con una actividad breve y clara.\n\n"
+        "## Actividad\n\n"
+        "- Lee la consigna.\n"
+        "- Responde con tu grupo.\n"
+        "- Revisa el resultado final.\n"
+    )
+
+
+def _default_worksheet_commit_message(worksheet_title: str, branch_name: str, uploaded_filenames: list[str] | None = None) -> str:
+    uploaded_filenames = uploaded_filenames or []
+    if uploaded_filenames:
+        if len(uploaded_filenames) == 1:
+            return f"Update worksheet {worksheet_title} and add {uploaded_filenames[0]} on {branch_name}"
+        return f"Update worksheet {worksheet_title} and add {len(uploaded_filenames)} assets on {branch_name}"
+    return f"Update worksheet {worksheet_title} on {branch_name}"
 
 
 async def _prepare_asset_writes(
@@ -286,6 +362,7 @@ def book_detail(
             "available_branches": list(dict.fromkeys(available_branches)),
             "content": content,
             "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "worksheet_entries": _worksheet_entries(book, selected_branch),
             "edit_branch": edit_branch,
             "message": _message_from_request(request),
         },
@@ -320,9 +397,15 @@ def edit_book_page(
             "branches": branches,
             "selected_branch": selected_branch,
             "content": content,
+            "document_title": book.title,
+            "editor_page_title": f"Editar {book.title}",
+            "save_action": f"/books/{book.id}/edit",
+            "cancel_href": f"/books/{book.id}?branch={selected_branch}",
+            "resource_kind_label": "Libro",
             "preview_document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
             "pagebreak_marker": PAGEBREAK_MARKER,
             "asset_entries": _asset_entries(book, selected_branch),
+            "worksheet_entries": _worksheet_entries(book, selected_branch),
             "message": _message_from_request(request),
         },
     )
@@ -360,6 +443,179 @@ async def save_book(
         message += f" Recursos anadidos: {', '.join(uploaded_filenames)}."
     return _redirect_with_message(
         f"/books/{book.id}",
+        message,
+        branch=branch_name,
+    )
+
+
+@router.post("/{book_id}/worksheets/new")
+def create_worksheet(
+    book_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    branch_name: str = Form(...),
+    title: str = Form(...),
+):
+    book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
+    if not book or not can_edit_book_on_branch(db, user, book, branch_name):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worksheet creation not allowed")
+
+    worksheet_title = title.strip()
+    worksheet_slug = slugify(worksheet_title)
+    if not worksheet_title or not worksheet_slug:
+        raise HTTPException(status_code=400, detail="Worksheet title required")
+
+    repo = repository_client_for(book.repository_source)
+    rel_path = _worksheet_rel_path(book, worksheet_slug)
+    if repo.read_text(rel_path, branch_name):
+        raise HTTPException(status_code=400, detail="Worksheet already exists")
+
+    repo.write_text(
+        rel_path=rel_path,
+        branch_name=branch_name,
+        content=_worksheet_content_template(worksheet_title),
+        commit_message=f"Create worksheet {worksheet_title} on {branch_name}",
+        author_name=user.full_name,
+        author_email=user.email,
+    )
+    return _redirect_with_message(
+        f"/books/{book.id}/worksheets/{worksheet_slug}/edit",
+        f"Ficha {worksheet_title} creada correctamente.",
+        branch=branch_name,
+    )
+
+
+@router.get("/{book_id}/worksheets/{worksheet_slug}")
+def worksheet_detail(
+    book_id: int,
+    worksheet_slug: str,
+    request: Request,
+    branch: str | None = None,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
+):
+    book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
+    if not book or not can_view_book(user, book):
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    repo = repository_client_for(book.repository_source)
+    selected_branch = branch or book.base_branch
+    content = repo.read_text(_worksheet_rel_path(book, worksheet_slug), selected_branch)
+    if not content:
+        raise HTTPException(status_code=404, detail="Worksheet not found")
+
+    available_branches = [book.base_branch]
+    editable_branches: list[str] = []
+    if user:
+        available_branches.extend(available_branches_for_book(db, user, book))
+        editable_branches = available_branches_for_book(db, user, book)
+
+    edit_branch = selected_branch if selected_branch in editable_branches else (editable_branches[0] if editable_branches else None)
+    worksheet_title = _extract_document_title(content, worksheet_slug.replace("-", " ").title())
+    return templates.TemplateResponse(
+        name="books/worksheet_detail.html",
+        request=request,
+        context={
+            "user": user,
+            "book": book,
+            "worksheet_slug": worksheet_slug,
+            "worksheet_title": worksheet_title,
+            "worksheet_summary": _extract_document_summary(content),
+            "selected_branch": selected_branch,
+            "available_branches": list(dict.fromkeys(available_branches)),
+            "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "edit_branch": edit_branch,
+            "message": _message_from_request(request),
+        },
+    )
+
+
+@router.get("/{book_id}/worksheets/{worksheet_slug}/edit")
+def edit_worksheet_page(
+    book_id: int,
+    worksheet_slug: str,
+    request: Request,
+    branch: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    branches = available_branches_for_book(db, user, book)
+    if not branches:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable branches available")
+    selected_branch = branch if branch in branches else branches[0]
+
+    repo = repository_client_for(book.repository_source)
+    repo.ensure_branch(selected_branch, book.base_branch)
+    rel_path = _worksheet_rel_path(book, worksheet_slug)
+    content = repo.read_text(rel_path, selected_branch) or repo.read_text(rel_path, book.base_branch)
+    if not content:
+        raise HTTPException(status_code=404, detail="Worksheet not found")
+    worksheet_title = _extract_document_title(content, worksheet_slug.replace("-", " ").title())
+    return templates.TemplateResponse(
+        name="books/editor.html",
+        request=request,
+        context={
+            "user": user,
+            "book": book,
+            "branches": branches,
+            "selected_branch": selected_branch,
+            "content": content,
+            "document_title": worksheet_title,
+            "editor_page_title": f"Editar ficha {worksheet_title}",
+            "save_action": f"/books/{book.id}/worksheets/{worksheet_slug}/edit",
+            "cancel_href": f"/books/{book.id}/worksheets/{worksheet_slug}?branch={selected_branch}",
+            "resource_kind_label": "Ficha",
+            "preview_document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "pagebreak_marker": PAGEBREAK_MARKER,
+            "asset_entries": _asset_entries(book, selected_branch),
+            "worksheet_entries": _worksheet_entries(book, selected_branch),
+            "message": _message_from_request(request),
+        },
+    )
+
+
+@router.post("/{book_id}/worksheets/{worksheet_slug}/edit")
+async def save_worksheet(
+    book_id: int,
+    worksheet_slug: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    branch_name: str = Form(...),
+    content: str = Form(...),
+    commit_message: str = Form("Update worksheet"),
+    assets: list[UploadFile] | None = File(None),
+):
+    book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
+    if not book or not can_edit_book_on_branch(db, user, book, branch_name):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Worksheet edit not allowed")
+
+    repo = repository_client_for(book.repository_source)
+    rel_path = _worksheet_rel_path(book, worksheet_slug)
+    if not (repo.read_text(rel_path, branch_name) or repo.read_text(rel_path, book.base_branch)):
+        raise HTTPException(status_code=404, detail="Worksheet not found")
+
+    asset_writes, uploaded_filenames = await _prepare_asset_writes(assets, book)
+    worksheet_title = _extract_document_title(content, worksheet_slug.replace("-", " ").title())
+    resolved_commit_message = commit_message.strip() or _default_worksheet_commit_message(
+        worksheet_title,
+        branch_name,
+        uploaded_filenames,
+    )
+    repo.write_files(
+        branch_name=branch_name,
+        files=[RepositoryFileWrite(rel_path=rel_path, content=content.encode("utf-8")), *asset_writes],
+        commit_message=resolved_commit_message,
+        author_name=user.full_name,
+        author_email=user.email,
+    )
+    message = f"Ficha guardada en la rama {branch_name}."
+    if uploaded_filenames:
+        message += f" Recursos anadidos: {', '.join(uploaded_filenames)}."
+    return _redirect_with_message(
+        f"/books/{book.id}/worksheets/{worksheet_slug}",
         message,
         branch=branch_name,
     )

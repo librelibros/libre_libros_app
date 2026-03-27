@@ -17,8 +17,13 @@ def build_client(tmp_path: Path):
     example_repo = tmp_path / "repo"
     book_dir = example_repo / "books" / "primaria" / "lengua" / "lengua-demo"
     (book_dir / "assets").mkdir(parents=True, exist_ok=True)
+    (book_dir / "worksheets").mkdir(parents=True, exist_ok=True)
     (book_dir / "book.md").write_text(
-        "# Lengua Demo\n\n## Introduccion\n\n![Portada](assets/cover.svg)\n\n![Actividad](assets/aula.png)\n\nParrafo de prueba para importacion.\n\n<!-- pagebreak -->\n\n## Actividades\n\n- Lectura guiada\n- Escritura breve\n",
+        "# Lengua Demo\n\n## Introduccion\n\n![Portada](assets/cover.svg)\n\n[[columns:2]]\n### Idea clave\n\nTexto en la primera columna.\n[[col]]\n### Practica guiada\n\n[[worksheet:ficha-comprension|Ir a ficha de comprension]]\n[[/columns]]\n\n![Actividad](assets/aula.png)\n\nParrafo de prueba para importacion.\n\n<!-- pagebreak -->\n\n## Actividades\n\n- Lectura guiada\n- Escritura breve\n",
+        encoding="utf-8",
+    )
+    (book_dir / "worksheets" / "ficha-comprension.md").write_text(
+        "# Ficha Comprension\n\n## Consigna\n\nLee el texto y responde.\n",
         encoding="utf-8",
     )
     (book_dir / "assets" / "cover.svg").write_text(
@@ -106,6 +111,8 @@ def test_book_detail_rewrites_asset_urls_and_serves_assets(tmp_path: Path):
     response = client.get("/books/1")
     assert response.status_code == 200
     assert '/books/1/assets/cover.svg?branch=main' in response.text
+    assert 'doc-columns doc-columns-2' in response.text
+    assert '/books/1/worksheets/ficha-comprension?branch=main' in response.text
     assert "Temas del libro" in response.text
     assert "Pagina 2 de 2" in response.text or "Pagina 1 de 2" in response.text
 
@@ -120,12 +127,14 @@ def test_preview_endpoint_builds_paginated_preview_with_book_assets(tmp_path: Pa
     response = client.post(
         "/books/preview",
         data={
-            "content": "# Demo\n\n## Tema 1\n\n![Portada](assets/cover.svg){: .doc-image .doc-align-right .doc-w-50}\n\n<!-- pagebreak -->\n\n## Tema 2",
+            "content": "# Demo\n\n## Tema 1\n\n[[columns:3]]\n### Uno\n\nA\n[[col]]\n### Dos\n\n[[worksheet:ficha-comprension|Ficha]]\n[[col]]\n### Tres\n\nC\n[[/columns]]\n\n![Portada](assets/cover.svg){: .doc-image .doc-align-right .doc-w-50}\n\n<!-- pagebreak -->\n\n## Tema 2",
             "book_id": "1",
             "branch_name": "main",
         },
     )
     assert response.status_code == 200
+    assert "doc-columns-3" in response.text
+    assert "/books/1/worksheets/ficha-comprension?branch=main" in response.text
     assert "/books/1/assets/cover.svg?branch=main" in response.text
     assert "doc-align-right" in response.text
     assert "Pagina 2" in response.text
@@ -151,6 +160,47 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Suelta archivos aquí o encima del área de texto" in response.text
     assert "Lo que acabas de soltar aparece aquí" in response.text
     assert 'data-editor-tab-button="library"' in response.text
+    assert "Fichas enlazables desde el documento" in response.text
+    assert "2 col" in response.text
+    assert "Ficha" in response.text
+
+
+def test_can_create_and_edit_a_worksheet(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        login_response = client.post(
+            "/login",
+            data={"email": "admin@test.local", "password": "admin12345"},
+            follow_redirects=True,
+        )
+        assert login_response.status_code == 200
+
+        create_response = client.post(
+            "/books/1/worksheets/new",
+            data={"branch_name": "main", "title": "Ficha Refuerzo"},
+            follow_redirects=True,
+        )
+        assert create_response.status_code == 200
+        assert "Ficha Ficha Refuerzo creada correctamente." in create_response.text
+        assert "Editar ficha Ficha Refuerzo" in create_response.text
+
+        save_response = client.post(
+            "/books/1/worksheets/ficha-refuerzo/edit",
+            data={
+                "branch_name": "main",
+                "content": "# Ficha Refuerzo\n\n[[columns:2]]\n### Reto\n\nCompleta el ejercicio.\n[[col]]\n### Enlace\n\n[[worksheet:ficha-comprension|Ficha base]]\n[[/columns]]\n",
+                "commit_message": "",
+            },
+            follow_redirects=True,
+        )
+        assert save_response.status_code == 200
+        assert "Ficha guardada en la rama main." in save_response.text
+        assert "doc-columns-2" in save_response.text
+        assert "/books/1/worksheets/ficha-comprension?branch=main" in save_response.text
+
+        worksheet_response = client.get("/books/1/worksheets/ficha-refuerzo?branch=main")
+        assert worksheet_response.status_code == 200
+        assert "Ficha Refuerzo" in worksheet_response.text
 
 
 def test_editor_save_persists_uploaded_assets_in_repository(tmp_path: Path):

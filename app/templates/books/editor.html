@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% set title = "Editar " ~ book.title %}
+{% set title = editor_page_title or ("Editar " ~ book.title) %}
 {% block content %}
 <section class="card stack editor-shell">
   <div class="section-header editor-page-head">
     <div>
       <p class="eyebrow">Edición Markdown</p>
-      <h2>{{ book.title }}</h2>
+      <h2>{{ document_title or book.title }}</h2>
       <p class="muted">Edición comprimida para trabajar sin perder contexto: documento, vista previa y medios en una sola pantalla.</p>
     </div>
   </div>
-  <form method="post" action="/books/{{ book.id }}/edit" class="stack editor-form" data-markdown-editor enctype="multipart/form-data">
+  <form method="post" action="{{ save_action or ('/books/' ~ book.id ~ '/edit') }}" class="stack editor-form" data-markdown-editor enctype="multipart/form-data">
     <div class="editor-command-bar">
       <label class="editor-field editor-field-branch">
         Rama
@@ -24,7 +24,7 @@
         <input type="text" name="commit_message" value="Update {{ book.title }}" />
       </label>
       <div class="editor-primary-actions">
-        <a class="button button-tonal" href="/books/{{ book.id }}?branch={{ selected_branch }}">Cancelar</a>
+        <a class="button button-tonal" href="{{ cancel_href or ('/books/' ~ book.id ~ '?branch=' ~ selected_branch) }}">Cancelar</a>
         <button class="button" type="submit">Guardar cambios</button>
       </div>
     </div>
@@ -35,7 +35,10 @@
       <button type="button" data-editor-action="italic">Cursiva</button>
       <button type="button" data-editor-action="list">Lista</button>
       <button type="button" data-editor-action="quote">Cita</button>
+      <button type="button" data-editor-action="columns-2">2 col</button>
+      <button type="button" data-editor-action="columns-3">3 col</button>
       <button type="button" data-editor-action="pagebreak">Salto</button>
+      <button type="button" data-editor-action="worksheet">Ficha</button>
       <button type="button" data-editor-action="image">Imagen</button>
       <button type="button" data-editor-action="audio">Audio</button>
     </div>
@@ -51,6 +54,7 @@
         </div>
         <div class="editor-summary-bar">
           <span class="chip">Rama activa: {{ selected_branch }}</span>
+          <span class="chip">{{ resource_kind_label or "Libro" }}</span>
           <span class="chip">Preview paginada</span>
           <span class="chip">Medios con arrastrar y soltar</span>
         </div>
@@ -66,7 +70,7 @@
         </div>
         <textarea name="content" rows="28" data-editor-input>{{ content }}</textarea>
         <p class="muted editor-note">
-          Usa <code>{{ pagebreak_marker }}</code> para forzar un cambio de página. Las imágenes admiten presets de tamaño y posición desde el panel <strong>Medios</strong>.
+          Usa <code>{{ pagebreak_marker }}</code> para forzar un cambio de página. También puedes insertar diseños de 2 o 3 columnas y enlaces a fichas desde la biblioteca lateral.
         </p>
       </section>
 
@@ -160,6 +164,42 @@
             <h3>Recursos disponibles en {{ selected_branch }}</h3>
             <p class="muted">Todo el material versionado vive aquí. Puedes reutilizarlo sin bajar a otra pantalla.</p>
           </div>
+          {% if worksheet_entries %}
+          <div class="stack compact">
+            <div>
+              <p class="eyebrow">Fichas</p>
+              <h3>Fichas enlazables desde el documento</h3>
+            </div>
+            <div class="stack compact">
+              {% for worksheet in worksheet_entries %}
+              <article class="comment stack compact worksheet-card">
+                <div class="comment-head">
+                  <strong>{{ worksheet.title }}</strong>
+                  <span class="chip">ficha</span>
+                </div>
+                {% if worksheet.summary %}
+                <p class="muted">{{ worksheet.summary }}</p>
+                {% endif %}
+                <code>{{ worksheet.snippet }}</code>
+                <div class="actions">
+                  <a class="button button-tonal" href="{{ worksheet.detail_url }}">Abrir ficha</a>
+                  <button
+                    type="button"
+                    class="button button-tonal"
+                    data-insert-worksheet
+                    data-worksheet-slug="{{ worksheet.slug }}"
+                    data-worksheet-title="{{ worksheet.title }}"
+                    data-worksheet-snippet="{{ worksheet.snippet }}"
+                  >
+                    Insertar enlace
+                  </button>
+                  <button type="button" class="button button-tonal" data-copy-text="{{ worksheet.snippet }}">Copiar snippet</button>
+                </div>
+              </article>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
           {% if asset_entries %}
           <div class="stack compact editor-library-list">
             {% for asset in asset_entries %}

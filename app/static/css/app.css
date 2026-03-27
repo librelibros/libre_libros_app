@@ -242,6 +242,49 @@ label {
   line-height: 1.65;
 }
 
+.markdown-body .doc-columns {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.markdown-body .doc-columns-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.markdown-body .doc-columns-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.markdown-body .doc-column {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid #dbe5f5;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f4f7fd 100%);
+}
+
+.markdown-body .worksheet-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.15rem 0.2rem;
+  font-weight: 700;
+}
+
+.markdown-body .worksheet-link::before {
+  content: "Ficha";
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: #dfe9ff;
+  color: var(--primary-strong);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .markdown-body img,
 .markdown-body audio {
   max-width: 100%;
@@ -685,6 +728,10 @@ td {
   align-content: start;
 }
 
+.worksheet-card {
+  align-content: start;
+}
+
 .editor-assets-panel {
   padding: 1rem 1.1rem;
   background: linear-gradient(180deg, #fbfcff 0%, #f3f7ff 100%);
@@ -838,5 +885,10 @@ td {
     width: 100%;
     max-width: 100%;
     margin: 1rem auto;
+  }
+
+  .markdown-body .doc-columns-2,
+  .markdown-body .doc-columns-3 {
+    grid-template-columns: 1fr;
   }
 }
