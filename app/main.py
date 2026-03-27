@@ -11,6 +11,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import GlobalRole, User
 from app.routers import admin, auth, books, dashboard
 from app.security import hash_password
+from app.services.bootstrap import sync_example_repository
 from app.templates import templates
 
 settings = get_settings()
@@ -37,12 +38,21 @@ def create_default_admin() -> None:
         db.close()
 
 
+def sync_bootstrap_content() -> None:
+    db: Session = SessionLocal()
+    try:
+        sync_example_repository(db)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Path("data").mkdir(exist_ok=True)
     settings.repos_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     create_default_admin()
+    sync_bootstrap_content()
     yield
 
 

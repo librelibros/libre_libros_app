@@ -19,10 +19,8 @@
           {% if user.global_role.value == "admin" %}
           <a href="/admin">Administración</a>
           {% endif %}
+          <a href="/logout">Cerrar sesión</a>
         </nav>
-        <form action="/logout" method="post" class="logout-form">
-          <button class="button button-tonal" type="submit">Salir</button>
-        </form>
         {% endif %}
       </aside>
       <main class="content">
@@ -35,6 +33,7 @@
           <div class="chip-group">
             <span class="chip">{{ user.full_name }}</span>
             <span class="chip">{{ user.global_role.value }}</span>
+            <a class="button button-tonal" href="/logout">Salir</a>
           </div>
         </header>
         {% endif %}
@@ -49,4 +48,3 @@
     </div>
   </body>
 </html>
-

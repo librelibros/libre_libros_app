@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     repos_root: Path = Path("data/repos")
+    example_repo_path: Path | None = None
     local_repo_prefix: str = "local-"
     max_image_bytes: int = 2 * 1024 * 1024
     max_audio_bytes: int = 2 * 1024 * 1024
@@ -50,4 +51,3 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.repos_root.mkdir(parents=True, exist_ok=True)
     return settings
-

@@ -138,8 +138,16 @@
       </label>
       <label>
         Ruta local
-        <input type="text" name="local_path" placeholder="./data/repos/mi-centro" />
+        <input
+          type="text"
+          name="local_path"
+          value="{{ example_repo_path }}"
+          placeholder="{{ example_repo_path or './data/repos/mi-centro' }}"
+        />
       </label>
+      {% if example_repo_path %}
+      <p class="muted">Ruta sugerida para pruebas: {{ example_repo_path }}</p>
+      {% endif %}
       <label>
         GitHub owner
         <input type="text" name="github_owner" />
@@ -172,4 +180,3 @@
   </article>
 </section>
 {% endblock %}
-

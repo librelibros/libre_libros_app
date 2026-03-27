@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from slugify import slugify
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_admin
 from app.models import (
@@ -17,6 +18,7 @@ from app.models import (
 from app.templates import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+settings = get_settings()
 
 
 def _ensure_org_manager(db: Session, user: User, organization_id: int) -> Organization:
@@ -56,6 +58,7 @@ def admin_panel(
             "global_roles": list(GlobalRole),
             "membership_roles": list(MembershipRole),
             "repository_providers": list(RepositoryProvider),
+            "example_repo_path": str(settings.example_repo_path) if settings.example_repo_path else "",
         },
     )
 

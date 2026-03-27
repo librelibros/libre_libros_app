@@ -19,7 +19,7 @@ Libre Libros es un MVP para crear, adaptar y revisar libros de texto colaborativ
 - `app/models.py`: usuarios, organizaciones, repositorios, libros, comentarios y revisiones
 - `app/routers/`: auth, panel, libros y administración
 - `app/services/repository/`: abstracción local Git / GitHub REST
-- `data/`: base SQLite y repositorios de contenidos locales
+- `../data/`: base SQLite y repositorio local montado para desarrollo y Docker
 
 ## Arranque en local
 
@@ -35,6 +35,12 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
+```
+
+Ajusta las rutas relativas si cambian. En local, la app usa el `data/` hermano:
+
+```text
+../data
 ```
 
 3. Arrancar la aplicación:
@@ -53,6 +59,7 @@ docker compose up --build
 ```
 
 La app quedará publicada en `http://localhost:8000`.
+Docker usa `.env_docker`, con rutas internas del contenedor (`/app/data`).
 
 ## Usuario inicial
 
@@ -68,12 +75,26 @@ Si configuras estas variables en `.env`, al arrancar se crea un admin automátic
 
 - Crea un repositorio desde `Administración`
 - Usa `provider=local`
-- Si no indicas ruta, la app usa `data/repos/<slug>`
+- Si no indicas ruta, la app usa `LIBRE_LIBROS_REPOS_ROOT`
+- Si defines `LIBRE_LIBROS_EXAMPLE_REPO_PATH` en `.env`, la UI sugerirá esa ruta en el formulario de repositorios
+- La configuración actual apunta al repo de prueba en `data/repo`
 
 También puedes preparar uno manualmente:
 
 ```bash
 python scripts/init_local_books_repo.py ./data/repos/demo-libros
+```
+
+Ruta local del repo de ejemplo desde la app en desarrollo:
+
+```text
+../data/repo
+```
+
+Ruta del repo de ejemplo dentro de Docker:
+
+```text
+/app/data/repo
 ```
 
 ### Repositorio GitHub
@@ -93,4 +114,3 @@ El token debe tener permisos para leer/escribir contenidos y crear issues o pull
 - Los comentarios de detalle viven en la base de datos de la app
 - Para GitHub se usa la API REST con token; no se implementa GitHub App todavía
 - El editor Markdown es intencionalmente sencillo
-

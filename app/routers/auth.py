@@ -120,6 +120,12 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
+@router.get("/logout")
+def logout_get(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)
+
+
 def _upsert_oidc_user(db: Session, email: str, name: str, provider: str) -> User:
     normalized_email = email.lower().strip()
     user = db.query(User).filter(User.email == normalized_email).first()
