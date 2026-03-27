@@ -9,7 +9,12 @@
   --border: #d5deeb;
   --error: #9f2d37;
   --success: #1b6e43;
-  --radius: 18px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius: var(--radius-lg);
   --shadow: 0 12px 28px rgba(15, 39, 81, 0.08);
 }
 
@@ -57,7 +62,7 @@ select,
 textarea {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 0.85rem 1rem;
   background: #fff;
   color: var(--text);
@@ -118,7 +123,7 @@ label {
 .nav a {
   color: rgba(255, 255, 255, 0.88);
   padding: 0.72rem 0.9rem;
-  border-radius: 13px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.065);
   font-size: 0.94rem;
   font-weight: 600;
@@ -190,7 +195,7 @@ label {
   border: 0;
   background: var(--primary);
   color: #fff;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   padding: 0.74rem 1.08rem;
   font-weight: 700;
   cursor: pointer;
@@ -205,7 +210,7 @@ label {
   display: inline-flex;
   align-items: center;
   padding: 0.32rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: var(--surface-alt);
   color: var(--muted);
   font-size: 0.82rem;
@@ -225,7 +230,7 @@ label {
 
 .alert {
   padding: 1rem 1.1rem;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
 }
 
 .alert-error {
@@ -260,7 +265,7 @@ label {
   min-width: 0;
   padding: 0.9rem;
   border: 1px solid #dbe5f5;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #fbfcff 0%, #f4f7fd 100%);
 }
 
@@ -277,7 +282,7 @@ label {
   display: inline-flex;
   align-items: center;
   padding: 0.18rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: #dfe9ff;
   color: var(--primary-strong);
   font-size: 0.72rem;
@@ -299,7 +304,7 @@ label {
 .markdown-body img.doc-image {
   display: block;
   height: auto;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   border: 1px solid rgba(21, 61, 117, 0.08);
   box-shadow: 0 14px 34px rgba(15, 39, 81, 0.08);
   background: #fff;
@@ -337,7 +342,7 @@ label {
 
 .comment {
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 0.8rem 0.9rem;
   background: #fff;
 }
@@ -346,7 +351,7 @@ code {
   display: block;
   background: #f6f8fc;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0.75rem;
   overflow-x: auto;
 }
@@ -377,7 +382,7 @@ td {
 .auth-card {
   width: min(520px, 100%);
   background: var(--surface);
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   padding: 1.65rem;
@@ -459,7 +464,7 @@ td {
   width: min(620px, calc(100vw - 2rem));
   border: 0;
   padding: 0;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 32px 84px rgba(15, 39, 81, 0.24);
   background: transparent;
 }
@@ -473,7 +478,7 @@ td {
   padding: 1.15rem;
   background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
   border: 1px solid #d8e3f6;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
 }
 
 .editor-save-summary {
@@ -503,7 +508,7 @@ td {
 .preview-panel,
 .editor-assets-panel,
 .editor-library-panel {
-  border-radius: 22px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   background: #fff;
   box-shadow: var(--shadow);
@@ -536,7 +541,7 @@ td {
 .editor-inline-assets {
   padding: 0.95rem 1rem;
   border: 1px solid #d8e3f6;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: linear-gradient(180deg, #fbfcff 0%, #f4f8ff 100%);
 }
 
@@ -554,7 +559,7 @@ td {
 .editor-inline-asset {
   padding: 0.85rem;
   border: 1px solid #d8e3f6;
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   background: #fff;
   display: grid;
   gap: 0.65rem;
@@ -570,7 +575,7 @@ td {
   aspect-ratio: 4 / 3;
   width: 100%;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #fff 0%, #f5f8fe 100%);
 }
@@ -592,7 +597,7 @@ td {
 
 .editor-canvas textarea {
   min-height: clamp(360px, 60vh, 760px);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   border: 1px solid #cfd9ea;
   background: linear-gradient(180deg, #fff 0%, #fcfdff 100%);
   padding: 1.15rem 1.2rem;
@@ -612,7 +617,7 @@ td {
   gap: 0.5rem;
   padding: 0.35rem;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow);
 }
@@ -621,7 +626,7 @@ td {
   border: 0;
   background: transparent;
   color: var(--muted);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 0.75rem 0.9rem;
   font-weight: 700;
   cursor: pointer;
@@ -707,7 +712,7 @@ td {
 .document-index {
   padding: 1rem;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: var(--surface-alt);
   position: sticky;
   top: 1rem;
@@ -718,7 +723,7 @@ td {
   background: transparent;
   color: var(--text);
   text-align: left;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0.6rem 0.75rem;
   cursor: pointer;
 }
@@ -747,7 +752,7 @@ td {
 .document-page {
   padding: 1.2rem;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: #fff;
   display: none;
 }
@@ -784,7 +789,7 @@ td {
   gap: 0.75rem;
   padding: 1.5rem;
   border: 2px dashed #b7c8ea;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.85);
   text-align: center;
   transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
@@ -801,7 +806,7 @@ td {
 .editor-media-composer {
   padding: 1rem;
   border: 1px solid #d8e3f6;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   background: #fff;
 }
 
@@ -813,7 +818,7 @@ td {
   width: 100%;
   max-height: 220px;
   object-fit: contain;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: #fff;
   padding: 0.5rem;
@@ -823,7 +828,7 @@ td {
   border: 1px solid var(--border);
   background: var(--surface-alt);
   color: var(--text);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   padding: 0.55rem 0.8rem;
   cursor: pointer;
 }
