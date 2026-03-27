@@ -528,7 +528,7 @@ def preview_markdown(
 ):
     document = build_book_document(content, book_id=book_id, branch_name=branch_name)
     template = templates.env.get_template("books/_document.html")
-    return template.render(document=document, document_id="editor-preview")
+    return template.render(document=document, document_id="editor-preview", compact_preview=True)
 
 
 @router.get("/{book_id}/assets/{asset_path:path}")

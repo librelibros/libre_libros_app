@@ -209,6 +209,51 @@ label {
   max-width: 100%;
 }
 
+.markdown-body::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+.markdown-body img.doc-image {
+  display: block;
+  height: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(21, 61, 117, 0.08);
+  box-shadow: 0 14px 34px rgba(15, 39, 81, 0.08);
+  background: #fff;
+}
+
+.markdown-body img.doc-align-center {
+  margin: 1rem auto 1.35rem;
+}
+
+.markdown-body img.doc-align-left {
+  float: left;
+  margin: 0.35rem 1.25rem 1rem 0;
+}
+
+.markdown-body img.doc-align-right {
+  float: right;
+  margin: 0.35rem 0 1rem 1.25rem;
+}
+
+.markdown-body img.doc-w-100 {
+  width: min(100%, 820px);
+}
+
+.markdown-body img.doc-w-66 {
+  width: min(66%, 560px);
+}
+
+.markdown-body img.doc-w-50 {
+  width: min(50%, 440px);
+}
+
+.markdown-body img.doc-w-33 {
+  width: min(33%, 320px);
+}
+
 .comment {
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -261,17 +306,85 @@ td {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  grid-template-columns: minmax(0, 1.08fr) minmax(460px, 1fr);
   gap: 1rem;
   align-items: start;
 }
 
-.preview-panel {
+.editor-canvas,
+.preview-panel,
+.editor-assets-panel {
+  border-radius: 22px;
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 1rem;
   background: #fff;
-  min-height: 200px;
+  box-shadow: var(--shadow);
+}
+
+.editor-canvas {
+  padding: 1.2rem;
+  min-height: 100%;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.editor-canvas.is-dragover {
+  border-color: var(--primary);
+  background: #f5f9ff;
+  box-shadow: 0 18px 40px rgba(36, 87, 197, 0.12);
+}
+
+.editor-canvas-head,
+.preview-panel-head {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.editor-canvas textarea {
+  min-height: 780px;
+  border-radius: 20px;
+  border: 1px solid #cfd9ea;
+  background: linear-gradient(180deg, #fff 0%, #fcfdff 100%);
+  padding: 1.15rem 1.2rem;
+  line-height: 1.75;
+}
+
+.editor-sidebar {
+  position: sticky;
+  top: 1.25rem;
+}
+
+.preview-panel {
+  padding: 1.15rem;
+  min-height: 240px;
+}
+
+.preview-panel .book-document {
+  gap: 1.1rem;
+}
+
+.preview-panel .document-layout.is-compact-preview {
+  grid-template-columns: 1fr;
+}
+
+.document-compact-toc {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.preview-panel .document-compact-toc .toc-link {
+  background: var(--surface-alt);
+}
+
+.preview-panel .document-page {
+  display: none;
+}
+
+.preview-panel .document-page.is-active {
+  display: grid;
+}
+
+.editor-note {
+  margin: 0;
 }
 
 .book-document,
@@ -346,8 +459,6 @@ td {
 
 .editor-assets-panel {
   padding: 1rem 1.1rem;
-  border: 1px dashed var(--border);
-  border-radius: 20px;
   background: linear-gradient(180deg, #fbfcff 0%, #f3f7ff 100%);
 }
 
@@ -369,6 +480,13 @@ td {
   border-color: var(--primary);
   background: #eef4ff;
   transform: translateY(-1px);
+}
+
+.editor-media-composer {
+  padding: 1rem;
+  border: 1px solid #d8e3f6;
+  border-radius: 18px;
+  background: #fff;
 }
 
 .pending-asset-card {
@@ -431,6 +549,14 @@ td {
   .document-index {
     position: static;
   }
+
+  .editor-sidebar {
+    position: static;
+  }
+
+  .editor-canvas textarea {
+    min-height: 520px;
+  }
 }
 
 @media (max-width: 760px) {
@@ -446,5 +572,16 @@ td {
 
   .content {
     padding: 1rem;
+  }
+
+  .markdown-body img.doc-align-left,
+  .markdown-body img.doc-align-right,
+  .markdown-body img.doc-w-66,
+  .markdown-body img.doc-w-50,
+  .markdown-body img.doc-w-33 {
+    float: none;
+    width: 100%;
+    max-width: 100%;
+    margin: 1rem auto;
   }
 }

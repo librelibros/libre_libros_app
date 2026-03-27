@@ -120,15 +120,16 @@ def test_preview_endpoint_builds_paginated_preview_with_book_assets(tmp_path: Pa
     response = client.post(
         "/books/preview",
         data={
-            "content": "# Demo\n\n## Tema 1\n\n![Portada](assets/cover.svg)\n\n<!-- pagebreak -->\n\n## Tema 2",
+            "content": "# Demo\n\n## Tema 1\n\n![Portada](assets/cover.svg){: .doc-image .doc-align-right .doc-w-50}\n\n<!-- pagebreak -->\n\n## Tema 2",
             "book_id": "1",
             "branch_name": "main",
         },
     )
     assert response.status_code == 200
-    assert "Temas del libro" in response.text
     assert "/books/1/assets/cover.svg?branch=main" in response.text
+    assert "doc-align-right" in response.text
     assert "Pagina 2" in response.text
+    assert "Tema 1" in response.text
 
 
 def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
@@ -145,9 +146,9 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert response.status_code == 200
     assert "Recursos disponibles en main" in response.text
     assert "cover.svg" in response.text
-    assert "![cover.svg](assets/cover.svg)" in response.text
-    assert "Insertar en el editor" in response.text
-    assert "Arrastra y suelta imágenes o audio" in response.text
+    assert "Preparar bloque" in response.text
+    assert "Configurar insercion" in response.text
+    assert "Suelta archivos aqui o encima del area de texto" in response.text
 
 
 def test_editor_save_persists_uploaded_assets_in_repository(tmp_path: Path):

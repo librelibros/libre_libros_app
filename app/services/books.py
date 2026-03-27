@@ -16,7 +16,9 @@ from svglib.svglib import svg2rlg
 from app.models import Book
 
 PAGEBREAK_PATTERN = re.compile(r"^\s*(?:<!--\s*pagebreak\s*-->|\[\[pagebreak\]\])\s*$", re.IGNORECASE | re.MULTILINE)
-MARKDOWN_IMAGE_PATTERN = re.compile(r"^!\[(?P<alt>[^\]]*)\]\((?P<path>[^)]+)\)\s*$")
+MARKDOWN_IMAGE_PATTERN = re.compile(
+    r'^!\[(?P<alt>[^\]]*)\]\((?P<path>[^)\s]+)(?:\s+"[^"]*")?\)\s*(?:\{:\s*(?P<attrs>[^}]*)\})?\s*$'
+)
 MARKDOWN_ORDERED_ITEM_PATTERN = re.compile(r"^(?P<index>\d+)\.\s+(?P<body>.+)$")
 MARKDOWN_UNORDERED_ITEM_PATTERN = re.compile(r"^[-*]\s+(?P<body>.+)$")
 
@@ -73,7 +75,7 @@ def export_markdown_to_pdf(
                     alt_text=image_match.group("alt").strip(),
                     asset_path=image_match.group("path").strip(),
                     asset_loader=asset_loader,
-                    max_width=image_max_width,
+                    max_width=_image_width_from_attrs(image_match.group("attrs"), image_max_width),
                     max_height=image_max_height,
                     caption_style=caption_style,
                     fallback_style=fallback_style,
@@ -160,3 +162,15 @@ def _scaled_dimensions(original_width: float, original_height: float, max_width:
         raise ValueError("Invalid asset dimensions")
     scale = min(max_width / original_width, max_height / original_height, 1)
     return original_width * scale, original_height * scale
+
+
+def _image_width_from_attrs(attrs: str | None, base_width: float) -> float:
+    if not attrs:
+        return base_width
+    if ".doc-w-33" in attrs:
+        return base_width * 0.33
+    if ".doc-w-50" in attrs:
+        return base_width * 0.5
+    if ".doc-w-66" in attrs:
+        return base_width * 0.66
+    return base_width

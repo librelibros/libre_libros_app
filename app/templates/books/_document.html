@@ -1,6 +1,8 @@
 {% set document_id = document_id|default("book-document") %}
-<div class="book-document stack" data-book-document id="{{ document_id }}">
-  <div class="document-layout">
+{% set compact_preview = compact_preview|default(false) %}
+<div class="book-document stack{% if compact_preview %} is-compact-preview{% endif %}" data-book-document id="{{ document_id }}">
+  <div class="document-layout{% if compact_preview %} is-compact-preview{% endif %}">
+    {% if not compact_preview %}
     <aside class="document-index">
       <div class="stack compact">
         <div>
@@ -23,8 +25,23 @@
         {% endif %}
       </div>
     </aside>
+    {% endif %}
 
     <div class="stack">
+      {% if compact_preview and document.toc %}
+      <div class="document-compact-toc">
+        {% for item in document.toc %}
+        <button
+          type="button"
+          class="toc-link toc-level-{{ item.level }}"
+          data-page-target="{{ item.page_number }}"
+          data-anchor-target="{{ item.anchor }}"
+        >
+          {{ item.title }}
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
       <div class="document-pagination">
         <button type="button" class="button button-tonal" data-page-prev>Pagina anterior</button>
         <span class="chip" data-page-indicator>Pagina 1 de {{ document.total_pages }}</span>
