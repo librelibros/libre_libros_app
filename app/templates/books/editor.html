@@ -9,7 +9,7 @@
       <p class="muted">Edición simplificada con vista previa, assets y ramas.</p>
     </div>
   </div>
-  <form method="post" action="/books/{{ book.id }}/edit" class="stack" data-markdown-editor>
+  <form method="post" action="/books/{{ book.id }}/edit" class="stack" data-markdown-editor enctype="multipart/form-data">
     <label>
       Rama de trabajo
       <select name="branch_name">
@@ -46,6 +46,25 @@
         </div>
       </div>
     </div>
+    <section class="stack compact editor-assets-panel">
+      <div>
+        <p class="eyebrow">Nuevos recursos</p>
+        <h3>Arrastra y suelta imágenes o audio</h3>
+        <p class="muted">Los archivos pendientes se guardan en Git junto con el Markdown al pulsar Guardar cambios.</p>
+      </div>
+      <input type="file" name="assets" accept="image/*,audio/mpeg" multiple hidden data-asset-input />
+      <div class="asset-dropzone" data-asset-dropzone tabindex="0">
+        <p><strong>Suelta archivos aqui</strong> o usa el selector.</p>
+        <button type="button" class="button button-tonal" data-asset-picker>Elegir archivos</button>
+      </div>
+      <div class="stack compact" data-pending-assets hidden>
+        <div>
+          <p class="eyebrow">Pendientes</p>
+          <h3>Se añadiran en este guardado</h3>
+        </div>
+        <div class="grid two" data-pending-assets-list></div>
+      </div>
+    </section>
     <div class="actions">
       <button class="button" type="submit">Guardar cambios</button>
       <a class="button button-tonal" href="/books/{{ book.id }}?branch={{ selected_branch }}">Cancelar</a>
@@ -56,17 +75,44 @@
 <section class="card stack">
   <div class="section-header">
     <div>
-      <p class="eyebrow">Recursos</p>
-      <h2>Subir imágenes o audio</h2>
+      <p class="eyebrow">Biblioteca</p>
+      <h2>Recursos disponibles en {{ selected_branch }}</h2>
     </div>
   </div>
-  <form method="post" action="/books/{{ book.id }}/upload" enctype="multipart/form-data" class="inline-form">
-    <input type="hidden" name="branch_name" value="{{ selected_branch }}" />
-    <input type="file" name="asset" required />
-    <button class="button button-tonal" type="submit">Subir archivo</button>
-  </form>
   <p class="muted">
-    Imágenes pequeñas y audios MP3 cortos. Inserta después en el Markdown usando las rutas que genera el repositorio.
+    Puedes seguir reutilizando los recursos ya guardados insertando su snippet directamente en el editor.
   </p>
+  <div class="stack compact">
+    <div>
+      <p class="eyebrow">Recursos versionados</p>
+      <h3>Assets ya presentes en la rama</h3>
+    </div>
+    {% if asset_entries %}
+    <div class="grid two">
+      {% for asset in asset_entries %}
+      <article class="comment stack compact asset-card">
+        <div class="comment-head">
+          <strong>{{ asset.filename }}</strong>
+          <span class="chip">{{ asset.media_type or "archivo" }}</span>
+        </div>
+        {% if asset.media_type.startswith("image/") %}
+        <img class="asset-preview" src="{{ asset.public_url }}" alt="{{ asset.filename }}" />
+        {% elif asset.media_type == "audio/mpeg" %}
+        <audio controls src="{{ asset.public_url }}"></audio>
+        {% else %}
+        <a href="{{ asset.public_url }}" target="_blank" rel="noreferrer">{{ asset.filename }}</a>
+        {% endif %}
+        <code>{{ asset.snippet }}</code>
+        <div class="actions">
+          <button type="button" class="button button-tonal" data-insert-snippet="{{ asset.snippet }}">Insertar en el editor</button>
+          <button type="button" class="button button-tonal" data-copy-text="{{ asset.snippet }}">Copiar snippet</button>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Todavia no hay recursos en esta rama. Sube una imagen o un audio para reutilizarlo en el libro.</p>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}

@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class RepositoryFileWrite:
+    rel_path: str
+    content: bytes
 
 
 class RepositoryClient(ABC):
@@ -21,6 +28,10 @@ class RepositoryClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def list_files(self, rel_path: str, branch_name: str) -> list[str]:
+        raise NotImplementedError
+
+    @abstractmethod
     def write_text(
         self,
         rel_path: str,
@@ -38,6 +49,17 @@ class RepositoryClient(ABC):
         rel_path: str,
         branch_name: str,
         content: bytes,
+        commit_message: str,
+        author_name: str,
+        author_email: str,
+    ) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def write_files(
+        self,
+        branch_name: str,
+        files: list[RepositoryFileWrite],
         commit_message: str,
         author_name: str,
         author_email: str,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -15,10 +16,98 @@ from app.services.books import default_book_paths, export_markdown_to_pdf, sanit
 from app.services.markdown_utils import PAGEBREAK_MARKER, build_book_document, markdown_preview
 from app.services.permissions import available_branches_for_book, can_edit_book_on_branch, can_view_book
 from app.services.repository.factory import repository_client_for
+from app.services.repository.base import RepositoryFileWrite
 from app.templates import templates
 
 router = APIRouter(prefix="/books", tags=["books"])
 settings = get_settings()
+
+
+def _message_from_request(request: Request) -> str | None:
+    return request.query_params.get("message")
+
+
+def _redirect_with_message(path: str, message: str, **params: str) -> RedirectResponse:
+    query = urlencode({**params, "message": message})
+    return RedirectResponse(f"{path}?{query}" if query else path, status_code=303)
+
+
+def _asset_snippet(filename: str) -> str:
+    media_type = mimetypes.guess_type(filename)[0] or ""
+    rel_path = f"assets/{filename}"
+    if media_type.startswith("image/"):
+        return f"![{filename}]({rel_path})"
+    if media_type == "audio/mpeg":
+        return f'<audio controls src="{rel_path}"></audio>'
+    return f"[{filename}]({rel_path})"
+
+
+def _asset_entries(book: Book, branch_name: str) -> list[dict[str, str]]:
+    repo = repository_client_for(book.repository_source)
+    files = repo.list_files(book.assets_path, branch_name)
+    entries: list[dict[str, str]] = []
+    for rel_path in sorted(files):
+        filename = rel_path.split("/")[-1]
+        media_type = mimetypes.guess_type(filename)[0] or ""
+        entries.append(
+            {
+                "filename": filename,
+                "rel_path": rel_path,
+                "public_url": f"/books/{book.id}/assets/{filename}?branch={branch_name}",
+                "snippet": _asset_snippet(filename),
+                "media_type": media_type,
+            }
+        )
+    return entries
+
+
+async def _prepare_asset_writes(
+    files: list[UploadFile] | None,
+    book: Book,
+) -> tuple[list[RepositoryFileWrite], list[str]]:
+    writes: list[RepositoryFileWrite] = []
+    uploaded_filenames: list[str] = []
+
+    for asset in files or []:
+        if not asset.filename:
+            continue
+        data = await asset.read()
+        if not data:
+            continue
+        content_type = asset.content_type or mimetypes.guess_type(asset.filename)[0] or ""
+        _validate_asset_upload(data, content_type)
+        filename = sanitize_filename(asset.filename)
+        writes.append(
+            RepositoryFileWrite(
+                rel_path=f"{book.assets_path}/{filename}",
+                content=data,
+            )
+        )
+        uploaded_filenames.append(filename)
+
+    return writes, uploaded_filenames
+
+
+def _validate_asset_upload(data: bytes, content_type: str) -> None:
+    if content_type.startswith("image/"):
+        if len(data) > settings.max_image_bytes:
+            raise HTTPException(status_code=400, detail="Image exceeds size limit")
+        return
+    if content_type == "audio/mpeg":
+        if len(data) > settings.max_audio_bytes:
+            raise HTTPException(status_code=400, detail="Audio exceeds size limit")
+        return
+    raise HTTPException(status_code=400, detail="Only images and short mp3 files are allowed")
+
+
+def _pdf_asset_loader(book: Book, repo, branch_name: str):
+    def load(markdown_path: str) -> bytes:
+        rel_path = markdown_path.removeprefix("./")
+        if not rel_path.startswith("assets/"):
+            return b""
+        return repo.read_binary(f"{book.assets_path}/{rel_path.removeprefix('assets/')}", branch_name)
+
+    return load
 
 
 @router.get("")
@@ -56,6 +145,7 @@ def list_books(
             "available_subjects": available_subjects,
             "selected_course": selected_course,
             "selected_subject": selected_subject,
+            "message": _message_from_request(request),
         },
     )
 
@@ -81,6 +171,7 @@ def new_book_page(
             "repository_sources": repository_sources,
             "visibilities": list(Visibility),
             "book": None,
+            "message": _message_from_request(request),
         },
     )
 
@@ -138,7 +229,7 @@ def create_book(
         author_name=user.full_name,
         author_email=user.email,
     )
-    return RedirectResponse(f"/books/{book.id}", status_code=303)
+    return _redirect_with_message(f"/books/{book.id}", "Libro creado correctamente.")
 
 
 @router.get("/{book_id}")
@@ -165,11 +256,16 @@ def book_detail(
 
     repo = repository_client_for(book.repository_source)
     available_branches = [book.base_branch]
+    editable_branches: list[str] = []
     if user:
         available_branches.extend(available_branches_for_book(db, user, book))
+        editable_branches = available_branches_for_book(db, user, book)
     selected_branch = branch or available_branches[0]
     repo.ensure_branch(selected_branch, book.base_branch)
     content = repo.read_text(book.content_path, selected_branch)
+    edit_branch = None
+    if user and editable_branches:
+        edit_branch = selected_branch if selected_branch in editable_branches else editable_branches[0]
 
     return templates.TemplateResponse(
         name="books/detail.html",
@@ -181,6 +277,8 @@ def book_detail(
             "available_branches": list(dict.fromkeys(available_branches)),
             "content": content,
             "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "edit_branch": edit_branch,
+            "message": _message_from_request(request),
         },
     )
 
@@ -199,9 +297,7 @@ def edit_book_page(
     branches = available_branches_for_book(db, user, book)
     if not branches:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable branches available")
-    selected_branch = branch or branches[0]
-    if not can_edit_book_on_branch(db, user, book, selected_branch):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden branch")
+    selected_branch = branch if branch in branches else branches[0]
 
     repo = repository_client_for(book.repository_source)
     repo.ensure_branch(selected_branch, book.base_branch)
@@ -217,32 +313,42 @@ def edit_book_page(
             "content": content,
             "preview_document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
             "pagebreak_marker": PAGEBREAK_MARKER,
+            "asset_entries": _asset_entries(book, selected_branch),
+            "message": _message_from_request(request),
         },
     )
 
 
 @router.post("/{book_id}/edit")
-def save_book(
+async def save_book(
     book_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
     branch_name: str = Form(...),
     content: str = Form(...),
     commit_message: str = Form("Update book"),
+    assets: list[UploadFile] | None = File(None),
 ):
     book = db.query(Book).options(joinedload(Book.organization), joinedload(Book.repository_source)).filter(Book.id == book_id).first()
     if not book or not can_edit_book_on_branch(db, user, book, branch_name):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Edit not allowed")
     repo = repository_client_for(book.repository_source)
-    repo.write_text(
-        rel_path=book.content_path,
+    asset_writes, uploaded_filenames = await _prepare_asset_writes(assets, book)
+    repo.write_files(
         branch_name=branch_name,
-        content=content,
+        files=[RepositoryFileWrite(rel_path=book.content_path, content=content.encode("utf-8")), *asset_writes],
         commit_message=commit_message,
         author_name=user.full_name,
         author_email=user.email,
     )
-    return RedirectResponse(f"/books/{book.id}?branch={branch_name}", status_code=303)
+    message = f"Cambios guardados en la rama {branch_name}."
+    if uploaded_filenames:
+        message += f" Recursos anadidos: {', '.join(uploaded_filenames)}."
+    return _redirect_with_message(
+        f"/books/{book.id}",
+        message,
+        branch=branch_name,
+    )
 
 
 @router.post("/{book_id}/comments")
@@ -266,7 +372,36 @@ def add_comment(
     )
     db.add(comment)
     db.commit()
-    return RedirectResponse(f"/books/{book.id}?branch={branch_name}", status_code=303)
+    return _redirect_with_message(
+        f"/books/{book.id}",
+        "Comentario anadido correctamente.",
+        branch=branch_name,
+    )
+
+
+@router.post("/{book_id}/comments/{comment_id}/delete")
+def delete_comment(
+    book_id: int,
+    comment_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    comment = db.get(BookComment, comment_id)
+    if not comment or comment.book_id != book_id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    book = db.get(Book, book_id)
+    if not book or not can_view_book(user, book):
+        raise HTTPException(status_code=404, detail="Book not found")
+    if user.global_role != GlobalRole.admin and comment.author_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Comment delete not allowed")
+    branch_name = comment.branch_name
+    db.delete(comment)
+    db.commit()
+    return _redirect_with_message(
+        f"/books/{book.id}",
+        "Comentario eliminado.",
+        branch=branch_name,
+    )
 
 
 @router.post("/{book_id}/issues")
@@ -296,7 +431,7 @@ def create_issue(
     )
     db.add(record)
     db.commit()
-    return RedirectResponse(f"/books/{book.id}", status_code=303)
+    return _redirect_with_message(f"/books/{book.id}", "Issue registrado correctamente.")
 
 
 @router.post("/{book_id}/pull-requests")
@@ -330,7 +465,11 @@ def create_pull_request(
     )
     db.add(record)
     db.commit()
-    return RedirectResponse(f"/books/{book.id}?branch={head_branch}", status_code=303)
+    return _redirect_with_message(
+        f"/books/{book.id}",
+        "Pull request registrada correctamente.",
+        branch=head_branch,
+    )
 
 
 @router.post("/{book_id}/upload")
@@ -347,14 +486,7 @@ async def upload_asset(
 
     data = await asset.read()
     content_type = asset.content_type or ""
-    if content_type.startswith("image/"):
-        if len(data) > settings.max_image_bytes:
-            raise HTTPException(status_code=400, detail="Image exceeds size limit")
-    elif content_type == "audio/mpeg":
-        if len(data) > settings.max_audio_bytes:
-            raise HTTPException(status_code=400, detail="Audio exceeds size limit")
-    else:
-        raise HTTPException(status_code=400, detail="Only images and short mp3 files are allowed")
+    _validate_asset_upload(data, content_type)
 
     repo = repository_client_for(book.repository_source)
     filename = sanitize_filename(asset.filename or "asset")
@@ -367,7 +499,11 @@ async def upload_asset(
         author_name=user.full_name,
         author_email=user.email,
     )
-    return RedirectResponse(f"/books/{book.id}/edit?branch={branch_name}", status_code=303)
+    return _redirect_with_message(
+        f"/books/{book.id}/edit",
+        f"Archivo {filename} subido correctamente.",
+        branch=branch_name,
+    )
 
 
 @router.post("/preview", response_class=HTMLResponse)
@@ -417,7 +553,11 @@ def export_pdf(
     repo = repository_client_for(book.repository_source)
     selected_branch = branch or book.base_branch
     content = repo.read_text(book.content_path, selected_branch)
-    pdf_bytes = export_markdown_to_pdf(book, content)
+    pdf_bytes = export_markdown_to_pdf(
+        book,
+        content,
+        asset_loader=_pdf_asset_loader(book, repo, selected_branch),
+    )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

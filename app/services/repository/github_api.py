@@ -4,7 +4,7 @@ import base64
 
 import httpx
 
-from app.services.repository.base import RepositoryClient
+from app.services.repository.base import RepositoryClient, RepositoryFileWrite
 
 
 class GitHubRepositoryClient(RepositoryClient):
@@ -69,6 +69,19 @@ class GitHubRepositoryClient(RepositoryClient):
             raise
         return base64.b64decode(response["content"])
 
+    def list_files(self, rel_path: str, branch_name: str) -> list[str]:
+        try:
+            response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return []
+            raise
+        if isinstance(response, dict):
+            if response.get("type") == "file":
+                return [response["path"]]
+            return []
+        return [item["path"] for item in response if item.get("type") == "file"]
+
     def _content_sha(self, rel_path: str, branch_name: str) -> str | None:
         try:
             response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
@@ -78,24 +91,51 @@ class GitHubRepositoryClient(RepositoryClient):
                 return None
             raise
 
-    def _write(
+    def write_files(
         self,
-        rel_path: str,
         branch_name: str,
-        content: bytes,
+        files: list[RepositoryFileWrite],
         commit_message: str,
+        author_name: str,
+        author_email: str,
     ) -> str:
         self.ensure_branch(branch_name, self.default_branch)
-        sha = self._content_sha(rel_path, branch_name)
-        payload = {
-            "message": commit_message,
-            "content": base64.b64encode(content).decode("utf-8"),
-            "branch": branch_name,
-        }
-        if sha:
-            payload["sha"] = sha
-        response = self._request("PUT", f"/contents/{rel_path}", json=payload)
-        return response["commit"]["sha"]
+        base_commit_sha = self._get_ref_sha(branch_name)
+        base_commit = self._request("GET", f"/git/commits/{base_commit_sha}")
+
+        tree = []
+        for file in files:
+            blob = self._request(
+                "POST",
+                "/git/blobs",
+                json={
+                    "content": base64.b64encode(file.content).decode("utf-8"),
+                    "encoding": "base64",
+                },
+            )
+            tree.append({"path": file.rel_path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+
+        new_tree = self._request(
+            "POST",
+            "/git/trees",
+            json={"base_tree": base_commit["tree"]["sha"], "tree": tree},
+        )
+        commit = self._request(
+            "POST",
+            "/git/commits",
+            json={
+                "message": commit_message,
+                "tree": new_tree["sha"],
+                "parents": [base_commit_sha],
+                "author": {"name": author_name, "email": author_email},
+            },
+        )
+        self._request(
+            "PATCH",
+            f"/git/refs/heads/{branch_name}",
+            json={"sha": commit["sha"], "force": False},
+        )
+        return commit["sha"]
 
     def write_text(
         self,
@@ -106,7 +146,13 @@ class GitHubRepositoryClient(RepositoryClient):
         author_name: str,
         author_email: str,
     ) -> str:
-        return self._write(rel_path, branch_name, content.encode("utf-8"), commit_message)
+        return self.write_files(
+            branch_name,
+            [RepositoryFileWrite(rel_path=rel_path, content=content.encode("utf-8"))],
+            commit_message,
+            author_name,
+            author_email,
+        )
 
     def write_binary(
         self,
@@ -117,7 +163,13 @@ class GitHubRepositoryClient(RepositoryClient):
         author_name: str,
         author_email: str,
     ) -> str:
-        return self._write(rel_path, branch_name, content, commit_message)
+        return self.write_files(
+            branch_name,
+            [RepositoryFileWrite(rel_path=rel_path, content=content)],
+            commit_message,
+            author_name,
+            author_email,
+        )
 
     def create_pull_request(self, title: str, body: str, head_branch: str, base_branch: str) -> dict:
         return self._request(

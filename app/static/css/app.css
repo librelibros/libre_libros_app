@@ -216,6 +216,15 @@ label {
   background: #fff;
 }
 
+code {
+  display: block;
+  background: #f6f8fc;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -329,6 +338,51 @@ td {
 
 .document-page.is-active {
   display: grid;
+}
+
+.asset-card {
+  align-content: start;
+}
+
+.editor-assets-panel {
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--border);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fbfcff 0%, #f3f7ff 100%);
+}
+
+.asset-dropzone {
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border: 2px dashed #b7c8ea;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+  outline: none;
+}
+
+.asset-dropzone.is-dragover,
+.asset-dropzone:focus-visible {
+  border-color: var(--primary);
+  background: #eef4ff;
+  transform: translateY(-1px);
+}
+
+.pending-asset-card {
+  align-content: start;
+}
+
+.asset-preview {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 0.5rem;
 }
 
 .toolbar {

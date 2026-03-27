@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from app.services.repository.base import RepositoryClient
+from app.services.repository.base import RepositoryClient, RepositoryFileWrite
 
 
 class LocalGitRepositoryClient(RepositoryClient):
@@ -83,26 +83,56 @@ class LocalGitRepositoryClient(RepositoryClient):
             return target.read_bytes()
         return b""
 
-    def _write(self, rel_path: str, branch_name: str, content: bytes, commit_message: str, author_name: str, author_email: str) -> str:
+    def list_files(self, rel_path: str, branch_name: str) -> list[str]:
+        try:
+            output = self._run("ls-tree", "-r", "--name-only", branch_name, rel_path)
+            files = [line.strip() for line in output.splitlines() if line.strip()]
+            if files:
+                return files
+        except RuntimeError:
+            pass
+        target = self.repo_path / rel_path
+        if not target.exists():
+            return []
+        return [item.relative_to(self.repo_path).as_posix() for item in target.rglob("*") if item.is_file()]
+
+    def write_files(
+        self,
+        branch_name: str,
+        files: list[RepositoryFileWrite],
+        commit_message: str,
+        author_name: str,
+        author_email: str,
+    ) -> str:
         self.ensure_branch(branch_name, self.default_branch)
         self._checkout(branch_name)
-        target = self.repo_path / rel_path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-        self._run("add", rel_path)
-        self._run(
-            "-c",
-            f"user.name={author_name}",
-            "-c",
-            f"user.email={author_email}",
-            "commit",
-            "-m",
-            commit_message,
-            check=False,
-        )
-        commit_sha = self._run("rev-parse", "HEAD")
-        self._checkout(self.default_branch)
-        return commit_sha
+        try:
+            for file in files:
+                target = self.repo_path / file.rel_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(file.content)
+            self._run("add", *[file.rel_path for file in files])
+            commit = subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    f"user.name={author_name}",
+                    "-c",
+                    f"user.email={author_email}",
+                    "commit",
+                    "-m",
+                    commit_message,
+                ],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if commit.returncode not in {0, 1}:
+                raise RuntimeError(commit.stderr.strip() or commit.stdout.strip())
+            return self._run("rev-parse", "HEAD")
+        finally:
+            self._checkout(self.default_branch)
 
     def write_text(
         self,
@@ -113,10 +143,9 @@ class LocalGitRepositoryClient(RepositoryClient):
         author_name: str,
         author_email: str,
     ) -> str:
-        return self._write(
-            rel_path,
+        return self.write_files(
             branch_name,
-            content.encode("utf-8"),
+            [RepositoryFileWrite(rel_path=rel_path, content=content.encode("utf-8"))],
             commit_message,
             author_name,
             author_email,
@@ -131,7 +160,13 @@ class LocalGitRepositoryClient(RepositoryClient):
         author_name: str,
         author_email: str,
     ) -> str:
-        return self._write(rel_path, branch_name, content, commit_message, author_name, author_email)
+        return self.write_files(
+            branch_name,
+            [RepositoryFileWrite(rel_path=rel_path, content=content)],
+            commit_message,
+            author_name,
+            author_email,
+        )
 
     def create_pull_request(self, title: str, body: str, head_branch: str, base_branch: str) -> dict:
         return {
