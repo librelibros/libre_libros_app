@@ -10,7 +10,11 @@
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <a class="brand" href="/">Libre Libros</a>
+        <a class="brand" href="/" aria-label="Inicio">
+          <img class="brand-mark" src="/static/img/libre-libros-mark.svg" alt="Logo de la biblioteca docente" />
+          <span class="brand-note">Biblioteca colaborativa para edición, revisión y publicación de materiales.</span>
+          <span class="sr-only">Libre Libros</span>
+        </a>
         {% if user %}
         <nav class="nav">
           <a href="/">Panel</a>

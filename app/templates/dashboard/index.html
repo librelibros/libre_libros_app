@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% set title = "Panel" %}
 {% block content %}
-<section class="grid three">
+<section class="grid stat-strip">
   <article class="card stat-card">
     <p class="eyebrow">Libros visibles</p>
     <strong>{{ books_count }}</strong>
@@ -47,7 +47,7 @@
       {% for subject, books in subjects.items() %}
       <div class="subsection">
         <h4>{{ subject }}</h4>
-        <div class="grid two">
+        <div class="grid catalog-grid">
           {% for book in books %}
           <a class="card book-card" href="/books/{{ book.id }}">
             <div class="chip-group">
