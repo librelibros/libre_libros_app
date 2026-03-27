@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% set title = "Nuevo libro" %}
+{% block content %}
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Alta de libro</p>
+      <h2>Crear libro base</h2>
+    </div>
+  </div>
+  <form method="post" action="/books/new" class="grid two form-grid">
+    <label>
+      Título
+      <input type="text" name="title" required />
+    </label>
+    <label>
+      Curso
+      <input type="text" name="course" required placeholder="1º ESO" />
+    </label>
+    <label>
+      Materia
+      <input type="text" name="subject" required placeholder="Lengua" />
+    </label>
+    <label>
+      Visibilidad
+      <select name="visibility">
+        {% for option in visibilities %}
+        <option value="{{ option.value }}">{{ option.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Repositorio de contenidos
+      <select name="repository_source_id" required>
+        {% for source in repository_sources %}
+        <option value="{{ source.id }}">{{ source.name }} · {{ source.provider.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Organización
+      <select name="organization_id">
+        <option value="">Personal</option>
+        {% for organization in organizations %}
+        <option value="{{ organization.id }}">{{ organization.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="span-2">
+      Resumen
+      <textarea name="summary" rows="4"></textarea>
+    </label>
+    <div class="span-2 actions">
+      <button class="button" type="submit">Crear libro</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+

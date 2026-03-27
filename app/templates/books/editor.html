@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% set title = "Editar " ~ book.title %}
+{% block content %}
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Edición Markdown</p>
+      <h2>{{ book.title }}</h2>
+      <p class="muted">Edición simplificada con vista previa, assets y ramas.</p>
+    </div>
+  </div>
+  <form method="post" action="/books/{{ book.id }}/edit" class="stack" data-markdown-editor>
+    <label>
+      Rama de trabajo
+      <select name="branch_name">
+        {% for branch in branches %}
+        <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Mensaje de commit
+      <input type="text" name="commit_message" value="Update {{ book.title }}" />
+    </label>
+    <div class="toolbar">
+      <button type="button" data-editor-action="heading">H2</button>
+      <button type="button" data-editor-action="bold">Negrita</button>
+      <button type="button" data-editor-action="italic">Cursiva</button>
+      <button type="button" data-editor-action="list">Lista</button>
+      <button type="button" data-editor-action="quote">Cita</button>
+      <button type="button" data-editor-action="image">Imagen</button>
+      <button type="button" data-editor-action="audio">Audio</button>
+    </div>
+    <div class="editor-layout">
+      <textarea name="content" rows="24" data-editor-input>{{ content }}</textarea>
+      <div class="preview-panel">
+        <p class="eyebrow">Vista previa</p>
+        <div class="markdown-body" data-editor-preview></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="button" type="submit">Guardar cambios</button>
+      <a class="button button-tonal" href="/books/{{ book.id }}?branch={{ selected_branch }}">Cancelar</a>
+    </div>
+  </form>
+</section>
+
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Recursos</p>
+      <h2>Subir imágenes o audio</h2>
+    </div>
+  </div>
+  <form method="post" action="/books/{{ book.id }}/upload" enctype="multipart/form-data" class="inline-form">
+    <input type="hidden" name="branch_name" value="{{ selected_branch }}" />
+    <input type="file" name="asset" required />
+    <button class="button button-tonal" type="submit">Subir archivo</button>
+  </form>
+  <p class="muted">
+    Imágenes pequeñas y audios MP3 cortos. Inserta después en el Markdown usando las rutas que genera el repositorio.
+  </p>
+</section>
+{% endblock %}
+

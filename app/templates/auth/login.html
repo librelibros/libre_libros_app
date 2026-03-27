@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acceso · Libre Libros</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body class="auth-page">
+    <section class="auth-card">
+      <p class="eyebrow">Plataforma editorial</p>
+      <h1>Acceder a Libre Libros</h1>
+      <p class="muted">
+        Plataforma para colegios e instituciones que gestionan libros colaborativos en Git y GitHub.
+      </p>
+      {% if error %}
+      <div class="alert alert-error">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/login" class="stack">
+        <label>
+          Correo
+          <input type="email" name="email" required />
+        </label>
+        <label>
+          Contraseña
+          <input type="password" name="password" required />
+        </label>
+        <button type="submit" class="button">Entrar</button>
+      </form>
+      <div class="stack compact">
+        {% if google_enabled %}
+        <a class="button button-tonal" href="/auth/google/start">Entrar con Google</a>
+        {% endif %}
+        {% if oidc_enabled %}
+        <a class="button button-tonal" href="/auth/oidc/start">Entrar con SSO</a>
+        {% endif %}
+      </div>
+      <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario</a></p>
+    </section>
+  </body>
+</html>
+

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% set title = "Administración" %}
+{% block content %}
+<section class="grid three admin-grid">
+  <article class="card stack">
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Usuarios</p>
+        <h2>Alta simple</h2>
+      </div>
+    </div>
+    <form method="post" action="/admin/users" class="stack">
+      <label>
+        Nombre
+        <input type="text" name="full_name" required />
+      </label>
+      <label>
+        Correo
+        <input type="email" name="email" required />
+      </label>
+      <label>
+        Contraseña
+        <input type="password" name="password" required />
+      </label>
+      <label>
+        Rol global
+        <select name="global_role">
+          {% for role in global_roles %}
+          <option value="{{ role.value }}">{{ role.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="button" type="submit">Crear usuario</button>
+    </form>
+    <div class="stack compact">
+      {% for item in users %}
+      <div class="comment">
+        <div class="comment-head">
+          <strong>{{ item.full_name }}</strong>
+          <span class="chip">{{ item.global_role.value }}</span>
+        </div>
+        <p>{{ item.email }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="card stack">
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Organizaciones</p>
+        <h2>Centros y equipos</h2>
+      </div>
+    </div>
+    <form method="post" action="/admin/organizations" class="stack">
+      <label>
+        Nombre
+        <input type="text" name="name" required />
+      </label>
+      <label>
+        Descripción
+        <textarea name="description" rows="4"></textarea>
+      </label>
+      <button class="button" type="submit">Crear organización</button>
+    </form>
+    <form method="post" action="/admin/memberships" class="stack">
+      <label>
+        Usuario
+        <select name="user_id">
+          {% for item in users %}
+          <option value="{{ item.id }}">{{ item.full_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Organización
+        <select name="organization_id">
+          {% for item in organizations %}
+          <option value="{{ item.id }}">{{ item.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Rol
+        <select name="role">
+          {% for role in membership_roles %}
+          <option value="{{ role.value }}">{{ role.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="button button-tonal" type="submit">Asignar membresía</button>
+    </form>
+    <div class="stack compact">
+      {% for item in organizations %}
+      <div class="comment">
+        <div class="comment-head">
+          <strong>{{ item.name }}</strong>
+          <span class="chip">{{ item.slug }}</span>
+        </div>
+        <p>{{ item.description or "Sin descripción." }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="card stack">
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Repositorios</p>
+        <h2>Git local o GitHub</h2>
+      </div>
+    </div>
+    <form method="post" action="/admin/repositories" class="stack">
+      <label>
+        Nombre
+        <input type="text" name="name" required />
+      </label>
+      <label>
+        Proveedor
+        <select name="provider">
+          {% for provider in repository_providers %}
+          <option value="{{ provider.value }}">{{ provider.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Rama principal
+        <input type="text" name="default_branch" value="main" />
+      </label>
+      <label>
+        Organización
+        <select name="organization_id">
+          <option value="">Sin organización</option>
+          {% for item in organizations %}
+          <option value="{{ item.id }}">{{ item.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Ruta local
+        <input type="text" name="local_path" placeholder="./data/repos/mi-centro" />
+      </label>
+      <label>
+        GitHub owner
+        <input type="text" name="github_owner" />
+      </label>
+      <label>
+        GitHub repo
+        <input type="text" name="github_repo" />
+      </label>
+      <label>
+        GitHub token
+        <input type="password" name="github_token" />
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="is_public" value="true" />
+        Repositorio público
+      </label>
+      <button class="button" type="submit">Guardar repositorio</button>
+    </form>
+    <div class="stack compact">
+      {% for item in repository_sources %}
+      <div class="comment">
+        <div class="comment-head">
+          <strong>{{ item.name }}</strong>
+          <span class="chip">{{ item.provider.value }}</span>
+        </div>
+        <p>{{ item.local_path or (item.github_owner ~ "/" ~ item.github_repo if item.github_owner else "Sin ubicación") }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endblock %}
+

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ app_name }}{% if title %} · {{ title }}{% endif %}</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <script defer src="/static/js/editor.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <a class="brand" href="/">Libre Libros</a>
+        {% if user %}
+        <nav class="nav">
+          <a href="/">Panel</a>
+          <a href="/books">Libros</a>
+          <a href="/books/new">Nuevo libro</a>
+          {% if user.global_role.value == "admin" %}
+          <a href="/admin">Administración</a>
+          {% endif %}
+        </nav>
+        <form action="/logout" method="post" class="logout-form">
+          <button class="button button-tonal" type="submit">Salir</button>
+        </form>
+        {% endif %}
+      </aside>
+      <main class="content">
+        {% if user %}
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Sesión</p>
+            <h1>{{ title or "Panel" }}</h1>
+          </div>
+          <div class="chip-group">
+            <span class="chip">{{ user.full_name }}</span>
+            <span class="chip">{{ user.global_role.value }}</span>
+          </div>
+        </header>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        {% if message %}
+        <div class="alert alert-success">{{ message }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>
+

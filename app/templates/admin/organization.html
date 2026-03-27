@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set title = "Organización " ~ organization.name %}
+{% block content %}
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Gestión de organización</p>
+      <h2>{{ organization.name }}</h2>
+      <p class="muted">{{ organization.description or "Sin descripción." }}</p>
+    </div>
+    <a class="button button-tonal" href="/">Volver al panel</a>
+  </div>
+  <form method="post" action="/admin/organizations/{{ organization.id }}/memberships" class="inline-form">
+    <label>
+      Usuario
+      <select name="user_id">
+        {% for item in users %}
+        <option value="{{ item.id }}">{{ item.full_name }} · {{ item.email }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Rol
+      <select name="role">
+        {% for role in membership_roles %}
+        <option value="{{ role.value }}">{{ role.value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="button" type="submit">Añadir usuario</button>
+  </form>
+  <div class="stack compact">
+    {% for membership in memberships %}
+    <div class="comment">
+      <div class="comment-head">
+        <strong>{{ membership.user.full_name }}</strong>
+        <span class="chip">{{ membership.role.value }}</span>
+      </div>
+      <p>{{ membership.user.email }}</p>
+      <form method="post" action="/admin/memberships/{{ membership.id }}/delete">
+        <button class="button button-tonal" type="submit">Quitar</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted">No hay usuarios asignados todavía.</p>
+    {% endfor %}
+  </div>
+</section>

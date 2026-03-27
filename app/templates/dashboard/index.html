@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% set title = "Panel" %}
+{% block content %}
+<section class="grid three">
+  <article class="card stat-card">
+    <p class="eyebrow">Libros visibles</p>
+    <strong>{{ books_count }}</strong>
+  </article>
+  <article class="card stat-card">
+    <p class="eyebrow">Libros públicos</p>
+    <strong>{{ public_books_count }}</strong>
+  </article>
+  <article class="card stat-card">
+    <p class="eyebrow">Actividad reciente</p>
+    <strong>{{ recent_reviews|length }}</strong>
+  </article>
+</section>
+
+{% if manageable_organizations %}
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Gestión</p>
+      <h2>Organizaciones que administras</h2>
+    </div>
+  </div>
+  <div class="chip-group">
+    {% for organization in manageable_organizations %}
+    <a class="button button-tonal" href="/admin/organizations/{{ organization.id }}">{{ organization.name }}</a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Catálogo</p>
+      <h2>Libros por curso y materia</h2>
+    </div>
+    <a class="button" href="/books/new">Crear libro</a>
+  </div>
+  {% if grouped_books %}
+    {% for course, subjects in grouped_books.items() %}
+    <div class="stack compact">
+      <h3>{{ course }}</h3>
+      {% for subject, books in subjects.items() %}
+      <div class="subsection">
+        <h4>{{ subject }}</h4>
+        <div class="grid two">
+          {% for book in books %}
+          <a class="card book-card" href="/books/{{ book.id }}">
+            <div class="chip-group">
+              <span class="chip">{{ book.visibility.value }}</span>
+              <span class="chip">{{ book.repository_source.provider.value }}</span>
+            </div>
+            <h5>{{ book.title }}</h5>
+            <p class="muted">{{ book.summary or "Sin resumen todavía." }}</p>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Todavía no hay libros accesibles. Crea el primero desde este panel.</p>
+  {% endif %}
+</section>
+
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Revisión</p>
+      <h2>Issues y propuestas de cambio</h2>
+    </div>
+  </div>
+  {% if recent_reviews %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Título</th>
+          <th>Estado</th>
+          <th>Enlace</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in recent_reviews %}
+        <tr>
+          <td>{{ item.kind.value }}</td>
+          <td>{{ item.title }}</td>
+          <td>{{ item.status.value }}</td>
+          <td>
+            {% if item.external_url %}
+            <a href="{{ item.external_url }}" target="_blank" rel="noreferrer">Abrir</a>
+            {% else %}
+            Local
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No hay actividad de revisión registrada todavía.</p>
+  {% endif %}
+</section>
+{% endblock %}

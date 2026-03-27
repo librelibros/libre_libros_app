@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% set title = book.title %}
+{% block content %}
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">{{ book.course }} · {{ book.subject }}</p>
+      <h2>{{ book.title }}</h2>
+      <p class="muted">{{ book.summary or "Sin resumen." }}</p>
+    </div>
+    <div class="chip-group">
+      <span class="chip">{{ book.visibility.value }}</span>
+      <span class="chip">{{ selected_branch }}</span>
+    </div>
+  </div>
+
+  <form method="get" class="inline-form">
+    <input type="hidden" name="branch" value="{{ selected_branch }}" />
+    <label>
+      Rama
+      <select name="branch" onchange="this.form.submit()">
+        {% for branch in available_branches %}
+        <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if user %}
+    <a class="button" href="/books/{{ book.id }}/edit?branch={{ selected_branch }}">Editar</a>
+    <a class="button button-tonal" href="/books/{{ book.id }}/export/pdf?branch={{ selected_branch }}">Exportar PDF</a>
+    {% endif %}
+  </form>
+
+  <article class="markdown-body">
+    {{ rendered_content|safe }}
+  </article>
+</section>
+
+<section class="grid two">
+  <article class="card stack">
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Comentarios</p>
+        <h2>Detalle pedagógico</h2>
+      </div>
+    </div>
+    {% if user %}
+    <form method="post" action="/books/{{ book.id }}/comments" class="stack">
+      <input type="hidden" name="branch_name" value="{{ selected_branch }}" />
+      <label>
+        Ancla opcional
+        <input type="text" name="anchor" placeholder="introduccion, actividad-3, linea-42..." />
+      </label>
+      <label>
+        Comentario
+        <textarea name="body" rows="4" required></textarea>
+      </label>
+      <button class="button" type="submit">Añadir comentario</button>
+    </form>
+    {% endif %}
+    <div class="stack compact">
+      {% for comment in book.comments %}
+      <div class="comment">
+        <div class="comment-head">
+          <strong>{{ comment.author.full_name }}</strong>
+          <span class="chip">{{ comment.branch_name }}</span>
+          {% if comment.anchor %}
+          <span class="chip">{{ comment.anchor }}</span>
+          {% endif %}
+        </div>
+        <p>{{ comment.body }}</p>
+      </div>
+      {% else %}
+      <p class="muted">Todavía no hay comentarios.</p>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="card stack">
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Revisión</p>
+        <h2>Issues y pull requests</h2>
+      </div>
+    </div>
+    {% if user %}
+    <form method="post" action="/books/{{ book.id }}/issues" class="stack">
+      <label>
+        Nuevo issue
+        <input type="text" name="title" required placeholder="Falta una actividad de repaso" />
+      </label>
+      <label>
+        Descripción
+        <textarea name="body" rows="3"></textarea>
+      </label>
+      <button class="button button-tonal" type="submit">Crear issue</button>
+    </form>
+
+    {% if available_branches|length > 1 %}
+    <form method="post" action="/books/{{ book.id }}/pull-requests" class="stack">
+      <label>
+        Rama origen
+        <select name="head_branch">
+          {% for branch in available_branches %}
+          {% if branch != book.base_branch %}
+          <option value="{{ branch }}">{{ branch }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Título
+        <input type="text" name="title" required placeholder="Propuesta de adaptación para el centro" />
+      </label>
+      <label>
+        Descripción
+        <textarea name="body" rows="3"></textarea>
+      </label>
+      <button class="button" type="submit">Abrir pull request</button>
+    </form>
+    {% endif %}
+    {% endif %}
+
+    <div class="stack compact">
+      {% for review in book.review_requests %}
+      <div class="comment">
+        <div class="comment-head">
+          <strong>{{ review.kind.value }}</strong>
+          <span class="chip">{{ review.status.value }}</span>
+          {% if review.head_branch %}
+          <span class="chip">{{ review.head_branch }} → {{ review.base_branch }}</span>
+          {% endif %}
+        </div>
+        <p>{{ review.title }}</p>
+        {% if review.external_url %}
+        <a href="{{ review.external_url }}" target="_blank" rel="noreferrer">Abrir en proveedor</a>
+        {% endif %}
+      </div>
+      {% else %}
+      <p class="muted">No hay revisión registrada para este libro.</p>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+{% endblock %}
+

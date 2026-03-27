@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Registro · Libre Libros</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body class="auth-page">
+    <section class="auth-card">
+      <p class="eyebrow">Alta simple</p>
+      <h1>Crear usuario</h1>
+      {% if error %}
+      <div class="alert alert-error">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/register" class="stack">
+        <label>
+          Nombre completo
+          <input type="text" name="full_name" required />
+        </label>
+        <label>
+          Correo
+          <input type="email" name="email" required />
+        </label>
+        <label>
+          Contraseña
+          <input type="password" name="password" minlength="8" required />
+        </label>
+        <button type="submit" class="button">Crear cuenta</button>
+      </form>
+      <p class="muted">¿Ya tienes cuenta? <a href="/login">Volver al acceso</a></p>
+    </section>
+  </body>
+</html>
+

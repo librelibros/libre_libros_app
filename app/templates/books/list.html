@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set title = "Libros" %}
+{% block content %}
+<section class="card stack">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Biblioteca</p>
+      <h2>Libros disponibles</h2>
+    </div>
+    <a class="button" href="/books/new">Nuevo libro</a>
+  </div>
+  <div class="grid two">
+    {% for book in books %}
+    <a class="card book-card" href="/books/{{ book.id }}">
+      <div class="chip-group">
+        <span class="chip">{{ book.course }}</span>
+        <span class="chip">{{ book.subject }}</span>
+      </div>
+      <h3>{{ book.title }}</h3>
+      <p class="muted">{{ book.summary or "Sin resumen." }}</p>
+    </a>
+    {% else %}
+    <p class="muted">No hay libros visibles para este usuario.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
+
