@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Bash(cut -d';' -f1-4)",
+      "Bash(cut -d';' -f1-6)",
+      "WebSearch",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:ollama.readthedocs.io)",
+      "WebFetch(domain:www.datacamp.com)",
+      "WebFetch(domain:docs.langchain.com)",
+      "WebFetch(domain:langchain-ai.github.io)",
+      "WebFetch(domain:python.langchain.com)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}
