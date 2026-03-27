@@ -326,6 +326,12 @@ function initializeSaveDialog(form, textarea) {
 
   openButton?.addEventListener("click", openDialog);
   closeButton?.addEventListener("click", () => dialog?.close());
+  form.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      openDialog();
+    }
+  });
 
   form.querySelector('select[name="branch_name"]')?.addEventListener("change", () => {
     syncBranchPreviewState(form);

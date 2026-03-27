@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 from base64 import b64decode
 from pathlib import Path
 
@@ -165,6 +166,7 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Ficha" in response.text
     assert "Guardar y crear commit" in response.text
     assert "Mensaje de commit" in response.text
+    assert "Ctrl/Cmd+S" in response.text
 
 
 def test_can_create_and_edit_a_worksheet(tmp_path: Path):
@@ -265,6 +267,37 @@ def test_editor_save_generates_commit_message_when_empty(tmp_path: Path):
         assert commit_subject == "Update Lengua Demo on main"
 
 
+def test_editor_save_generates_commit_message_when_missing(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        login_response = client.post(
+            "/login",
+            data={"email": "admin@test.local", "password": "admin12345"},
+            follow_redirects=True,
+        )
+        assert login_response.status_code == 200
+
+        response = client.post(
+            "/books/1/edit",
+            data={
+                "branch_name": "main",
+                "content": "# Lengua Demo\n\nTexto actualizado otra vez.\n",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "Cambios guardados en la rama main." in response.text
+
+        commit_subject = subprocess.run(
+            ["git", "log", "-1", "--pretty=%s"],
+            cwd=tmp_path / "repo",
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert commit_subject == "Update Lengua Demo on main"
+
+
 def test_pdf_export_includes_embedded_images(tmp_path: Path):
     client = build_client(tmp_path)
     with client:
@@ -333,3 +366,74 @@ def test_public_book_edit_link_falls_back_to_teacher_branch(tmp_path: Path):
     response = client.get("/books/1/edit?branch=main")
     assert response.status_code == 200
     assert "users/ana-profe" in response.text
+
+
+def test_local_git_repository_serializes_parallel_process_writes(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        pass
+
+    repo_path = tmp_path / "repo"
+
+    workers = [
+        ("users/ana-profe", "Ana Profe"),
+        ("users/bruno-profe", "Bruno Profe"),
+        ("users/carla-profe", "Carla Profe"),
+    ]
+
+    worker_code = """
+from pathlib import Path
+import sys
+import time
+from app.services.repository.local_git import LocalGitRepositoryClient
+
+repo_path, branch_name, label = sys.argv[1:4]
+client = LocalGitRepositoryClient(Path(repo_path))
+rel_path = "books/primaria/lengua/lengua-demo/book.md"
+
+for version in range(4):
+    client.write_text(
+        rel_path=rel_path,
+        branch_name=branch_name,
+        content=f"# {label}\\n\\nVersion {version}\\n",
+        commit_message=f"{label} version {version}",
+        author_name=label,
+        author_email=f"{label.lower()}@test.local",
+    )
+    time.sleep(0.01)
+"""
+
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", worker_code, str(repo_path), branch_name, label],
+            cwd=Path(__file__).resolve().parents[1],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for branch_name, label in workers
+    ]
+
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=30)
+        assert process.returncode == 0, stdout + stderr
+
+    for branch_name, label in workers:
+        branch_content = subprocess.run(
+            ["git", "show", f"{branch_name}:books/primaria/lengua/lengua-demo/book.md"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert label in branch_content
+        assert "Version 3" in branch_content
+
+    current_branch = subprocess.run(
+        ["git", "branch", "--show-current"],
+        cwd=repo_path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert current_branch == "main"

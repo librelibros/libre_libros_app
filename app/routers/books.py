@@ -418,7 +418,7 @@ async def save_book(
     user: User = Depends(require_user),
     branch_name: str = Form(...),
     content: str = Form(...),
-    commit_message: str = Form("Update book"),
+    commit_message: str | None = Form(None),
     assets: list[UploadFile] | None = File(None),
 ):
     book = db.query(Book).options(joinedload(Book.organization), joinedload(Book.repository_source)).filter(Book.id == book_id).first()
@@ -426,7 +426,7 @@ async def save_book(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Edit not allowed")
     repo = repository_client_for(book.repository_source)
     asset_writes, uploaded_filenames = await _prepare_asset_writes(assets, book)
-    resolved_commit_message = commit_message.strip() or _default_commit_message(
+    resolved_commit_message = (commit_message or "").strip() or _default_commit_message(
         book,
         branch_name,
         uploaded_filenames,
@@ -585,7 +585,7 @@ async def save_worksheet(
     user: User = Depends(require_user),
     branch_name: str = Form(...),
     content: str = Form(...),
-    commit_message: str = Form("Update worksheet"),
+    commit_message: str | None = Form(None),
     assets: list[UploadFile] | None = File(None),
 ):
     book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
@@ -599,7 +599,7 @@ async def save_worksheet(
 
     asset_writes, uploaded_filenames = await _prepare_asset_writes(assets, book)
     worksheet_title = _extract_document_title(content, worksheet_slug.replace("-", " ").title())
-    resolved_commit_message = commit_message.strip() or _default_worksheet_commit_message(
+    resolved_commit_message = (commit_message or "").strip() or _default_worksheet_commit_message(
         worksheet_title,
         branch_name,
         uploaded_filenames,

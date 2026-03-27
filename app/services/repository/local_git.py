@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 import subprocess
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 from app.services.repository.base import RepositoryClient, RepositoryFileWrite
+
+try:  # pragma: no cover - Windows fallback is exercised by import path only
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None
+
+_REPO_LOCKS: dict[str, threading.RLock] = {}
+_REPO_LOCKS_GUARD = threading.Lock()
 
 
 class LocalGitRepositoryClient(RepositoryClient):
@@ -11,7 +21,36 @@ class LocalGitRepositoryClient(RepositoryClient):
         self.repo_path = repo_path
         self.default_branch = default_branch
         self.repo_path.mkdir(parents=True, exist_ok=True)
+        resolved_path = str(self.repo_path.resolve())
+        with _REPO_LOCKS_GUARD:
+            self._lock = _REPO_LOCKS.setdefault(resolved_path, threading.RLock())
+        self._lock_file_path = self.repo_path / ".libre-libros.lock"
+        self._lock_state = threading.local()
         self._ensure_repo()
+
+    @contextmanager
+    def _locked(self):
+        with self._lock:
+            depth = getattr(self._lock_state, "depth", 0)
+            if depth == 0 and fcntl is not None:
+                handle = self._lock_file_path.open("a+b")
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                self._lock_state.handle = handle
+            self._lock_state.depth = depth + 1
+            try:
+                yield
+            finally:
+                next_depth = self._lock_state.depth - 1
+                if next_depth == 0:
+                    handle = getattr(self._lock_state, "handle", None)
+                    if handle is not None and fcntl is not None:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                        handle.close()
+                    if hasattr(self._lock_state, "handle"):
+                        del self._lock_state.handle
+                    del self._lock_state.depth
+                else:
+                    self._lock_state.depth = next_depth
 
     def _run(self, *args: str, check: bool = True) -> str:
         completed = subprocess.run(
@@ -26,28 +65,30 @@ class LocalGitRepositoryClient(RepositoryClient):
         return completed.stdout.strip()
 
     def _ensure_repo(self) -> None:
-        if (self.repo_path / ".git").exists():
-            return
-        self._run("init", "-b", self.default_branch)
-        (self.repo_path / "README.md").write_text("# Libre Libros content repo\n", encoding="utf-8")
-        self._run("add", "README.md")
-        self._run(
-            "-c",
-            "user.name=Libre Libros",
-            "-c",
-            "user.email=libre-libros@example.local",
-            "commit",
-            "-m",
-            "Initial content repository",
-        )
+        with self._locked():
+            if (self.repo_path / ".git").exists():
+                return
+            self._run("init", "-b", self.default_branch)
+            (self.repo_path / "README.md").write_text("# Libre Libros content repo\n", encoding="utf-8")
+            self._run("add", "README.md")
+            self._run(
+                "-c",
+                "user.name=Libre Libros",
+                "-c",
+                "user.email=libre-libros@example.local",
+                "commit",
+                "-m",
+                "Initial content repository",
+            )
 
     def ensure_branch(self, branch_name: str, base_branch: str) -> None:
-        existing = self.list_branches()
-        if branch_name in existing:
-            return
-        self._run("checkout", base_branch)
-        self._run("checkout", "-b", branch_name)
-        self._run("checkout", base_branch)
+        with self._locked():
+            existing = self.list_branches()
+            if branch_name in existing:
+                return
+            self._run("checkout", base_branch)
+            self._run("checkout", "-b", branch_name)
+            self._run("checkout", base_branch)
 
     def list_branches(self) -> list[str]:
         output = self._run("branch", "--format=%(refname:short)")
@@ -104,35 +145,36 @@ class LocalGitRepositoryClient(RepositoryClient):
         author_name: str,
         author_email: str,
     ) -> str:
-        self.ensure_branch(branch_name, self.default_branch)
-        self._checkout(branch_name)
-        try:
-            for file in files:
-                target = self.repo_path / file.rel_path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(file.content)
-            self._run("add", *[file.rel_path for file in files])
-            commit = subprocess.run(
-                [
-                    "git",
-                    "-c",
-                    f"user.name={author_name}",
-                    "-c",
-                    f"user.email={author_email}",
-                    "commit",
-                    "-m",
-                    commit_message,
-                ],
-                cwd=self.repo_path,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if commit.returncode not in {0, 1}:
-                raise RuntimeError(commit.stderr.strip() or commit.stdout.strip())
-            return self._run("rev-parse", "HEAD")
-        finally:
-            self._checkout(self.default_branch)
+        with self._locked():
+            self.ensure_branch(branch_name, self.default_branch)
+            self._checkout(branch_name)
+            try:
+                for file in files:
+                    target = self.repo_path / file.rel_path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(file.content)
+                self._run("add", *[file.rel_path for file in files])
+                commit = subprocess.run(
+                    [
+                        "git",
+                        "-c",
+                        f"user.name={author_name}",
+                        "-c",
+                        f"user.email={author_email}",
+                        "commit",
+                        "-m",
+                        commit_message,
+                    ],
+                    cwd=self.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if commit.returncode not in {0, 1}:
+                    raise RuntimeError(commit.stderr.strip() or commit.stdout.strip())
+                return self._run("rev-parse", "HEAD")
+            finally:
+                self._checkout(self.default_branch)
 
     def write_text(
         self,

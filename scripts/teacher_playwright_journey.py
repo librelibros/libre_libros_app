@@ -2,18 +2,10 @@ from __future__ import annotations
 
 import argparse
 import base64
-import os
-import shutil
-import subprocess
-import sys
-import time
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import TextIO
-
-import httpx
 
 try:
     from playwright.sync_api import Error as PlaywrightError
@@ -24,10 +16,8 @@ except ImportError as exc:  # pragma: no cover
         "y luego `python3 -m playwright install chromium`."
     ) from exc
 
+from journey_support import build_env, build_output_dir, launch_server, prepare_example_repo
 
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = PROJECT_DIR.parent
-TEST_PLAN_DIR = PROJECT_DIR / "test_plan"
 DEFAULT_BASE_URL = "http://127.0.0.1:8011"
 TEACHER_EMAIL = "ana.profe@validator.local"
 TEACHER_PASSWORD = "profe12345"
@@ -45,77 +35,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
     parser.add_argument("--headed", action="store_true")
     return parser.parse_args()
-
-
-def build_output_dir() -> Path:
-    output_dir = TEST_PLAN_DIR / f"{date.today().isoformat()}-teacher-journey"
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    return output_dir
-
-
-def build_env(output_dir: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    example_repo = REPO_ROOT / "data" / "repo"
-    env.update(
-        {
-            "LIBRE_LIBROS_DATABASE_URL": f"sqlite:///{output_dir / 'teacher.db'}",
-            "LIBRE_LIBROS_REPOS_ROOT": str(output_dir / "repos"),
-            "LIBRE_LIBROS_EXAMPLE_REPO_PATH": str(example_repo),
-            "LIBRE_LIBROS_INIT_ADMIN_EMAIL": "admin@teacher.local",
-            "LIBRE_LIBROS_INIT_ADMIN_PASSWORD": "admin12345",
-            "LIBRE_LIBROS_INIT_ADMIN_NAME": "Teacher Admin",
-            "LIBRE_LIBROS_SECRET_KEY": "teacher-journey-secret",
-        }
-    )
-    return env
-
-
-def wait_for_server(base_url: str, timeout_seconds: int = 30) -> None:
-    deadline = time.time() + timeout_seconds
-    last_error = "sin respuesta"
-    while time.time() < deadline:
-        try:
-            response = httpx.get(f"{base_url}/login", timeout=2.0)
-            if response.status_code == 200:
-                return
-            last_error = f"/login devolvio {response.status_code}"
-        except httpx.HTTPError as exc:
-            last_error = str(exc)
-        time.sleep(0.5)
-    raise RuntimeError(f"La app no estuvo disponible en {base_url}: {last_error}")
-
-
-def launch_server(base_url: str, output_dir: Path) -> tuple[subprocess.Popen[str], TextIO]:
-    server_log = output_dir / "server.log"
-    log_handle = server_log.open("w", encoding="utf-8")
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "app.main:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            base_url.rsplit(":", 1)[-1],
-        ],
-        cwd=str(PROJECT_DIR),
-        env=build_env(output_dir),
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    try:
-        wait_for_server(base_url)
-    except Exception:
-        with suppress(Exception):
-            process.terminate()
-        with suppress(Exception):
-            process.wait(timeout=5)
-        raise
-    return process, log_handle
 
 
 def write_sample_png(output_dir: Path) -> Path:
@@ -332,12 +251,25 @@ def write_reports(output_dir: Path, base_url: str, observations: list[Observatio
 
 def main() -> int:
     args = parse_args()
-    output_dir = build_output_dir()
-    server_process: subprocess.Popen[str] | None = None
-    log_handle: TextIO | None = None
+    output_dir = build_output_dir("teacher-journey")
+    server_process = None
+    log_handle = None
 
     try:
-        server_process, log_handle = launch_server(args.base_url, output_dir)
+        example_repo_path = prepare_example_repo(output_dir)
+        server_process, log_handle = launch_server(
+            base_url=args.base_url,
+            output_dir=output_dir,
+            env=build_env(
+                output_dir,
+                example_repo_path=example_repo_path,
+                db_filename="teacher.db",
+                admin_email="admin@teacher.local",
+                admin_password="admin12345",
+                admin_name="Teacher Admin",
+                secret_key="teacher-journey-secret",
+            ),
+        )
         observations = run_flow(args.base_url, output_dir, args.headed)
         write_reports(output_dir, args.base_url, observations)
     finally:
