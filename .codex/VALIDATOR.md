@@ -72,7 +72,34 @@ Review for:
 4. **DRY**: No unnecessary duplication (but no premature abstraction either)
 5. **Simplicity**: No over-engineering or unnecessary complexity
 
-### Step 7: Classify Findings
+### Step 7: Usage Testing and Iteration
+
+Run end-to-end usage tests against the running project before approval:
+
+1. Start the application in the target runtime that matters for delivery:
+   - local runtime when validating developer execution
+   - Docker runtime when the project is expected to ship with Docker
+2. Create `test_plan/` in the project root if it does not exist
+3. Create a dated execution folder such as `test_plan/2026-03-27-smoke/`
+4. Execute several user histories step by step in a real browser, not only API calls. At minimum cover:
+   - login/logout
+   - opening the book catalogue
+   - filtering books by course and subject
+   - opening a book detail page
+   - editing or previewing markdown when the feature exists
+   - one admin flow when the project contains administration features
+5. Capture a screenshot at each relevant step and store it in the execution folder
+6. Record a chronological log in the same folder, for example `run-log.md`, including:
+   - exact environment used
+   - URLs visited
+   - credentials or seeded users used for testing
+   - user actions performed step by step
+   - observed result
+   - console errors, server logs, and failing requests when present
+7. Use the observed failures and generated logs to iterate the project until the tested user histories pass, within the validator loop limit
+8. If browser automation is available, use it. If not, use a manually driven browser session and still persist screenshots and logs in `test_plan/`
+
+### Step 8: Classify Findings
 
 | Severity | Description | Action |
 |----------|-------------|--------|
@@ -80,7 +107,7 @@ Review for:
 | **MAJOR** | Convention violations, missing error handling, poor patterns, best practice violations | MUST fix — returned to Developer |
 | **MINOR** | Style improvements, naming suggestions, documentation | Noted but not blocking |
 
-### Step 8: Issue Verdict
+### Step 9: Issue Verdict
 
 **APPROVED** when:
 - Zero CRITICAL findings
@@ -93,7 +120,7 @@ Review for:
 - Include file path, line numbers, what is wrong, and exactly how to fix it
 - Include best practice references from internet research where applicable
 
-### Step 9: Update Codebase Analyst with Guardrails
+### Step 10: Update Codebase Analyst with Guardrails
 
 After completing the review (regardless of verdict), update the **agent definition file** [CODEBASE-ANALYST.md](CODEBASE-ANALYST.md) so that the Codebase Analyst includes these guardrails in all future outputs. For each CRITICAL or MAJOR finding:
 
@@ -121,6 +148,13 @@ Then produce `generated/codebase-context-updates.md` summarizing all changes mad
 | Source | Topic | Key Finding |
 |--------|-------|-------------|
 | [URL or reference] | [topic] | [relevant finding applied to review] |
+
+## Usage Test Evidence
+| Artifact | Path | Notes |
+|----------|------|-------|
+| Browser run log | `test_plan/.../run-log.md` | [summary of executed user histories] |
+| Screenshot set | `test_plan/...` | [list or summary of captured steps] |
+| Server logs | `test_plan/.../server.log` | [if collected] |
 
 ## Completeness
 | Requirement | Status | Notes |
@@ -219,6 +253,7 @@ After 2 validation iterations, the following issues remain unresolved:
 8. **Project-aware**: Always validate against `generated/codebase-context.md` conventions
 9. **Update guardrails**: Always update `CODEBASE-ANALYST.md` with lessons learned so the agent includes them in future outputs
 10. **Validate UX output**: For user-facing changes, block on material UX mismatches against `generated/ux-spec.md`
+11. **Validate real usage**: Approval requires usage-test evidence under `test_plan/` for user-facing features
 
 ## Self-Check
 
@@ -227,6 +262,7 @@ Before completing each review:
 - [ ] All acceptance criteria from `generated/feature-spec.md` have been checked
 - [ ] Code is evaluated against `generated/codebase-context.md` conventions
 - [ ] User-facing code is evaluated against `generated/ux-spec.md`
+- [ ] Real usage tests were executed and evidence was written under `test_plan/`
 - [ ] Every finding has a severity classification
 - [ ] Every CRITICAL and MAJOR finding has a specific fix instruction for Developers
 - [ ] No code was modified by the Validator — only review and reporting

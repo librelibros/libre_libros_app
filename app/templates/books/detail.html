@@ -30,9 +30,7 @@
     {% endif %}
   </form>
 
-  <article class="markdown-body">
-    {{ rendered_content|safe }}
-  </article>
+  {% include "books/_document.html" %}
 </section>
 
 <section class="grid two">
@@ -142,4 +140,3 @@
   </article>
 </section>
 {% endblock %}
-

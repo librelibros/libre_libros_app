@@ -1,13 +1,16 @@
+import re
 from io import BytesIO
 from pathlib import Path
 
 from markdown import markdown
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 from slugify import slugify
 
 from app.models import Book
+
+PAGEBREAK_PATTERN = re.compile(r"^\s*(?:<!--\s*pagebreak\s*-->|\[\[pagebreak\]\])\s*$", re.IGNORECASE | re.MULTILINE)
 
 
 def default_book_paths(course: str, subject: str, slug: str) -> tuple[str, str]:
@@ -20,7 +23,7 @@ def default_book_paths(course: str, subject: str, slug: str) -> tuple[str, str]:
 def render_markdown_html(content: str) -> str:
     return markdown(
         content,
-        extensions=["extra", "tables", "fenced_code", "toc"],
+        extensions=["extra", "tables", "fenced_code", "toc", "attr_list"],
     )
 
 
@@ -32,6 +35,9 @@ def export_markdown_to_pdf(book: Book, content: str) -> bytes:
 
     for raw_line in content.splitlines():
         line = raw_line.strip()
+        if PAGEBREAK_PATTERN.match(line):
+            story.append(PageBreak())
+            continue
         if not line:
             story.append(Spacer(1, 8))
             continue
@@ -52,4 +58,3 @@ def export_markdown_to_pdf(book: Book, content: str) -> bytes:
 def sanitize_filename(filename: str) -> str:
     name = Path(filename).name
     return slugify(Path(name).stem) + Path(name).suffix.lower()
-

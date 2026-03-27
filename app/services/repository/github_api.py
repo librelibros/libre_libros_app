@@ -60,6 +60,15 @@ class GitHubRepositoryClient(RepositoryClient):
             raise
         return base64.b64decode(response["content"]).decode("utf-8")
 
+    def read_binary(self, rel_path: str, branch_name: str) -> bytes:
+        try:
+            response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return b""
+            raise
+        return base64.b64decode(response["content"])
+
     def _content_sha(self, rel_path: str, branch_name: str) -> str | None:
         try:
             response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
@@ -119,4 +128,3 @@ class GitHubRepositoryClient(RepositoryClient):
 
     def create_issue(self, title: str, body: str) -> dict:
         return self._request("POST", "/issues", json={"title": title, "body": body})
-

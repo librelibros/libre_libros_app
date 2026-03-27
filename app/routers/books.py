@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import mimetypes
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from slugify import slugify
@@ -10,7 +12,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_user
 from app.models import Book, BookComment, GlobalRole, Organization, RepositorySource, ReviewKind, ReviewRequest, ReviewStatus, User, Visibility
 from app.services.books import default_book_paths, export_markdown_to_pdf, sanitize_filename
-from app.services.markdown_utils import markdown_preview
+from app.services.markdown_utils import PAGEBREAK_MARKER, build_book_document, markdown_preview
 from app.services.permissions import available_branches_for_book, can_edit_book_on_branch, can_view_book
 from app.services.repository.factory import repository_client_for
 from app.templates import templates
@@ -22,6 +24,8 @@ settings = get_settings()
 @router.get("")
 def list_books(
     request: Request,
+    course: str | None = None,
+    subject: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -32,10 +36,27 @@ def list_books(
         .all()
     )
     visible_books = [book for book in books if can_view_book(user, book)]
+    available_courses = sorted({book.course for book in visible_books})
+    available_subjects = sorted({book.subject for book in visible_books})
+
+    selected_course = course.strip() if course else ""
+    selected_subject = subject.strip() if subject else ""
+    if selected_course:
+        visible_books = [book for book in visible_books if book.course == selected_course]
+    if selected_subject:
+        visible_books = [book for book in visible_books if book.subject == selected_subject]
+
     return templates.TemplateResponse(
         name="books/list.html",
         request=request,
-        context={"user": user, "books": visible_books},
+        context={
+            "user": user,
+            "books": visible_books,
+            "available_courses": available_courses,
+            "available_subjects": available_subjects,
+            "selected_course": selected_course,
+            "selected_subject": selected_subject,
+        },
     )
 
 
@@ -159,7 +180,7 @@ def book_detail(
             "selected_branch": selected_branch,
             "available_branches": list(dict.fromkeys(available_branches)),
             "content": content,
-            "rendered_content": markdown_preview(content),
+            "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
         },
     )
 
@@ -194,6 +215,8 @@ def edit_book_page(
             "branches": branches,
             "selected_branch": selected_branch,
             "content": content,
+            "preview_document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "pagebreak_marker": PAGEBREAK_MARKER,
         },
     )
 
@@ -348,8 +371,37 @@ async def upload_asset(
 
 
 @router.post("/preview", response_class=HTMLResponse)
-def preview_markdown(content: str = Form(...)):
-    return markdown_preview(content)
+def preview_markdown(
+    content: str = Form(...),
+    book_id: int | None = Form(None),
+    branch_name: str | None = Form(None),
+):
+    document = build_book_document(content, book_id=book_id, branch_name=branch_name)
+    template = templates.env.get_template("books/_document.html")
+    return template.render(document=document, document_id="editor-preview")
+
+
+@router.get("/{book_id}/assets/{asset_path:path}")
+def serve_book_asset(
+    book_id: int,
+    asset_path: str,
+    branch: str | None = None,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user),
+):
+    book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
+    if not book or not can_view_book(user, book):
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    repo = repository_client_for(book.repository_source)
+    selected_branch = branch or book.base_branch
+    rel_path = f"{book.assets_path}/{asset_path}"
+    asset_bytes = repo.read_binary(rel_path, selected_branch)
+    if not asset_bytes:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    media_type = mimetypes.guess_type(asset_path)[0] or "application/octet-stream"
+    return Response(content=asset_bytes, media_type=media_type)
 
 
 @router.get("/{book_id}/export/pdf")

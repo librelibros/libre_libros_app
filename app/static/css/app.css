@@ -254,6 +254,7 @@ td {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 1rem;
+  align-items: start;
 }
 
 .preview-panel {
@@ -262,6 +263,72 @@ td {
   padding: 1rem;
   background: #fff;
   min-height: 200px;
+}
+
+.book-document,
+.document-index,
+.document-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.document-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.document-index {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-alt);
+  position: sticky;
+  top: 1rem;
+}
+
+.toc-link {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+}
+
+.toc-link:hover,
+.toc-link.is-active {
+  background: #dfe9ff;
+}
+
+.toc-level-2,
+.toc-level-3,
+.toc-level-4,
+.toc-level-5,
+.toc-level-6 {
+  margin-left: 0.8rem;
+}
+
+.document-pagination {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.document-page {
+  padding: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  display: none;
+}
+
+.document-page.is-active {
+  display: grid;
 }
 
 .toolbar {
@@ -300,10 +367,15 @@ td {
 @media (max-width: 1024px) {
   .shell,
   .editor-layout,
+  .document-layout,
   .grid.two,
   .grid.three,
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .document-index {
+    position: static;
   }
 }
 
@@ -322,4 +394,3 @@ td {
     padding: 1rem;
   }
 }
-

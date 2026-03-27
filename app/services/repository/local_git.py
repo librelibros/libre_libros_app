@@ -65,6 +65,24 @@ class LocalGitRepositoryClient(RepositoryClient):
                 return target.read_text(encoding="utf-8")
             return ""
 
+    def read_binary(self, rel_path: str, branch_name: str) -> bytes:
+        try:
+            completed = subprocess.run(
+                ["git", "show", f"{branch_name}:{rel_path}"],
+                cwd=self.repo_path,
+                capture_output=True,
+                check=False,
+            )
+            if completed.returncode == 0:
+                return completed.stdout
+        except FileNotFoundError:
+            pass
+
+        target = self.repo_path / rel_path
+        if target.exists():
+            return target.read_bytes()
+        return b""
+
     def _write(self, rel_path: str, branch_name: str, content: bytes, commit_message: str, author_name: str, author_email: str) -> str:
         self.ensure_branch(branch_name, self.default_branch)
         self._checkout(branch_name)
@@ -128,4 +146,3 @@ class LocalGitRepositoryClient(RepositoryClient):
 
     def create_issue(self, title: str, body: str) -> dict:
         return {"number": None, "url": None, "title": title, "body": body, "mode": "local-issue"}
-

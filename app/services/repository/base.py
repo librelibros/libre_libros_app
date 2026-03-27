@@ -17,6 +17,10 @@ class RepositoryClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def read_binary(self, rel_path: str, branch_name: str) -> bytes:
+        raise NotImplementedError
+
+    @abstractmethod
     def write_text(
         self,
         rel_path: str,
@@ -47,4 +51,3 @@ class RepositoryClient(ABC):
     @abstractmethod
     def create_issue(self, title: str, body: str) -> dict:
         raise NotImplementedError
-

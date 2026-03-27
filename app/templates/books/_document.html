@@ -1,0 +1,47 @@
+{% set document_id = document_id|default("book-document") %}
+<div class="book-document stack" data-book-document id="{{ document_id }}">
+  <div class="document-layout">
+    <aside class="document-index">
+      <div class="stack compact">
+        <div>
+          <p class="eyebrow">Indice</p>
+          <h3>Temas del libro</h3>
+        </div>
+        {% if document.toc %}
+        {% for item in document.toc %}
+        <button
+          type="button"
+          class="toc-link toc-level-{{ item.level }}"
+          data-page-target="{{ item.page_number }}"
+          data-anchor-target="{{ item.anchor }}"
+        >
+          {{ item.title }}
+        </button>
+        {% endfor %}
+        {% else %}
+        <p class="muted">Anade encabezados Markdown para construir el indice.</p>
+        {% endif %}
+      </div>
+    </aside>
+
+    <div class="stack">
+      <div class="document-pagination">
+        <button type="button" class="button button-tonal" data-page-prev>Pagina anterior</button>
+        <span class="chip" data-page-indicator>Pagina 1 de {{ document.total_pages }}</span>
+        <button type="button" class="button button-tonal" data-page-next>Pagina siguiente</button>
+      </div>
+
+      {% for page in document.pages %}
+      <section class="document-page{% if loop.first %} is-active{% endif %}" data-book-page data-page-number="{{ page.number }}">
+        <div class="chip-group">
+          <span class="chip">Pagina {{ page.number }}</span>
+          <span class="chip">{{ page.label }}</span>
+        </div>
+        <article class="markdown-body">
+          {{ page.html|safe }}
+        </article>
+      </section>
+      {% endfor %}
+    </div>
+  </div>
+</div>

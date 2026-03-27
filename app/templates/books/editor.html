@@ -28,14 +28,22 @@
       <button type="button" data-editor-action="italic">Cursiva</button>
       <button type="button" data-editor-action="list">Lista</button>
       <button type="button" data-editor-action="quote">Cita</button>
+      <button type="button" data-editor-action="pagebreak">Salto</button>
       <button type="button" data-editor-action="image">Imagen</button>
       <button type="button" data-editor-action="audio">Audio</button>
     </div>
     <div class="editor-layout">
       <textarea name="content" rows="24" data-editor-input>{{ content }}</textarea>
+      <input type="hidden" name="book_id" value="{{ book.id }}" data-editor-book-id />
+      <input type="hidden" name="preview_branch_name" value="{{ selected_branch }}" data-editor-branch />
       <div class="preview-panel">
         <p class="eyebrow">Vista previa</p>
-        <div class="markdown-body" data-editor-preview></div>
+        <p class="muted">Usa <code>{{ pagebreak_marker }}</code> para forzar un cambio de pagina.</p>
+        <div data-editor-preview>
+          {% set document = preview_document %}
+          {% set document_id = "editor-initial-preview" %}
+          {% include "books/_document.html" %}
+        </div>
       </div>
     </div>
     <div class="actions">
@@ -62,4 +70,3 @@
   </p>
 </section>
 {% endblock %}
-

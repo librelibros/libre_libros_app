@@ -9,6 +9,30 @@
     </div>
     <a class="button" href="/books/new">Nuevo libro</a>
   </div>
+  <form class="inline-form" method="get" action="/books">
+    <label>
+      Curso
+      <select name="course">
+        <option value="">Todos los cursos</option>
+        {% for course in available_courses %}
+        <option value="{{ course }}" {% if course == selected_course %}selected{% endif %}>{{ course }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Materia
+      <select name="subject">
+        <option value="">Todas las materias</option>
+        {% for subject in available_subjects %}
+        <option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="actions">
+      <button class="button" type="submit">Filtrar</button>
+      <a class="button button-tonal" href="/books">Limpiar</a>
+    </div>
+  </form>
   <div class="grid two">
     {% for book in books %}
     <a class="card book-card" href="/books/{{ book.id }}">
@@ -20,9 +44,8 @@
       <p class="muted">{{ book.summary or "Sin resumen." }}</p>
     </a>
     {% else %}
-    <p class="muted">No hay libros visibles para este usuario.</p>
+    <p class="muted">No hay libros que coincidan con los filtros seleccionados.</p>
     {% endfor %}
   </div>
 </section>
 {% endblock %}
-
