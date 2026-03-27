@@ -43,6 +43,8 @@ When you request full execution, the workflow is:
 4. Create the technical plan
 5. Implement the tasks
 6. Validate the result
+7. Refine the UX based on the executed test plan and captured screenshots
+8. Re-run the relevant tests and create a final commit with the delivered changes
 
 Artifacts are written under `generated/`.
 
@@ -56,6 +58,13 @@ Some requests still require a confirmation before implementation:
 - Major product decisions that materially change the project
 
 The feature specification must be confirmed before development starts.
+
+Unless you explicitly say otherwise, the expected close-out for a completed execution is:
+
+- verification completed
+- UX reviewed and refined when the change is user-facing
+- relevant automated and browser-based tests executed
+- at least one final git commit created for the delivered work
 
 ## Short request example
 
