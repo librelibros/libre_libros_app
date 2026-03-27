@@ -100,6 +100,10 @@ function buildColumnsSnippet(columnCount) {
   return `[[columns:${totalColumns}]]\n${blocks.join("\n[[col]]\n")}\n[[/columns]]`;
 }
 
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function setActivePage(container, nextPageNumber, anchorId = null) {
   const pages = [...container.querySelectorAll("[data-book-page]")];
   if (!pages.length) return;
@@ -254,6 +258,84 @@ function setEditorTab(form, tabName) {
   form.querySelectorAll("[data-editor-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.editorPanel !== tabName;
   });
+}
+
+function syncBranchPreviewState(form) {
+  const branchSelect = form.querySelector('select[name="branch_name"]');
+  const branchName = branchSelect?.value || "";
+  const hiddenBranch = form.querySelector("[data-editor-branch]");
+  const branchLabel = form.querySelector("[data-active-branch-label]");
+  if (hiddenBranch) hiddenBranch.value = branchName;
+  if (branchLabel) branchLabel.textContent = `Rama activa: ${branchName}`;
+}
+
+function updateSaveDialogSummary(form) {
+  const textarea = form.querySelector("[data-editor-input]");
+  const branchSelect = form.querySelector('select[name="branch_name"]');
+  const branchName = branchSelect?.value || form.querySelector("[data-editor-branch]")?.value || "";
+  const files = [...(form._editorState?.transfer?.files || [])];
+  const columnsCount = (textarea?.value.match(/\[\[columns:[23]\]\]/gi) || []).length;
+  const worksheetsCount = (textarea?.value.match(/\[\[worksheet:[^\]]+\]\]/gi) || []).length;
+
+  const branchTarget = form.querySelector("[data-save-branch]");
+  const columnsTarget = form.querySelector("[data-save-columns]");
+  const worksheetsTarget = form.querySelector("[data-save-worksheets]");
+  const assetsTarget = form.querySelector("[data-save-assets]");
+  const assetsDetailTarget = form.querySelector("[data-save-assets-detail]");
+  const checklist = form.querySelector("[data-save-checklist]");
+
+  if (branchTarget) branchTarget.textContent = branchName;
+  if (columnsTarget) columnsTarget.textContent = `${pluralize(columnsCount, "bloque en columnas", "bloques en columnas")}`;
+  if (worksheetsTarget) worksheetsTarget.textContent = `${pluralize(worksheetsCount, "enlace a ficha", "enlaces a fichas")}`;
+  if (assetsTarget) assetsTarget.textContent = `${pluralize(files.length, "asset pendiente", "assets pendientes")}`;
+
+  if (assetsDetailTarget) {
+    assetsDetailTarget.textContent = files.length
+      ? `Archivos nuevos: ${files.map((file) => sanitizeAssetFilename(file.name)).join(", ")}.`
+      : "Sin archivos nuevos en esta edición.";
+  }
+
+  if (checklist) {
+    const items = [
+      "Documento Markdown actualizado.",
+      `${pluralize(columnsCount, "bloque en columnas", "bloques en columnas")} detectados.`,
+      `${pluralize(worksheetsCount, "enlace a ficha", "enlaces a fichas")} detectados.`,
+    ];
+    if (files.length) {
+      items.push(`Se versionarán ${pluralize(files.length, "archivo nuevo", "archivos nuevos")}.`);
+    }
+    checklist.innerHTML = items.map((item) => `<li>${item}</li>`).join("");
+  }
+}
+
+function initializeSaveDialog(form, textarea) {
+  const dialog = form.querySelector("[data-save-dialog]");
+  const openButton = form.querySelector("[data-open-save-dialog]");
+  const closeButton = form.querySelector("[data-close-save-dialog]");
+  const commitInput = form.querySelector("[data-save-commit-input]");
+
+  const openDialog = () => {
+    updateSaveDialogSummary(form);
+    if (!dialog || typeof dialog.showModal !== "function") {
+      form.requestSubmit();
+      return;
+    }
+    dialog.showModal();
+    commitInput?.focus();
+  };
+
+  openButton?.addEventListener("click", openDialog);
+  closeButton?.addEventListener("click", () => dialog?.close());
+
+  form.querySelector('select[name="branch_name"]')?.addEventListener("change", () => {
+    syncBranchPreviewState(form);
+    updateSaveDialogSummary(form);
+    refreshPreview(form);
+  });
+
+  textarea.addEventListener("input", () => updateSaveDialogSummary(form));
+  syncBranchPreviewState(form);
+  updateSaveDialogSummary(form);
 }
 
 function renderSelectedAsset(form) {
@@ -490,6 +572,7 @@ function renderPendingAssets(form, textarea) {
 
   renderInlineAssets(form);
   hydrateDraftAssetsInPreview(form);
+  updateSaveDialogSummary(form);
 }
 
 function appendFilesToEditor(form, textarea, files, options = {}) {
@@ -643,6 +726,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!textarea) return;
 
     initializeMediaStudio(form, textarea);
+    initializeSaveDialog(form, textarea);
 
     form.querySelectorAll("[data-editor-action]").forEach((button) => {
       button.addEventListener("click", () => {

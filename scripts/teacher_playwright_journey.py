@@ -231,9 +231,11 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
             }"""
         )
         update_textarea(page, "![Foto de clase](assets/foto-de-clase.png){: .doc-image .doc-align-right .doc-w-50}")
-        page.get_by_label("Commit").fill("Adaptacion docente del proyecto lector")
+        page.get_by_role("button", name="Guardar").click()
+        expect(page.get_by_role("heading", name="Preparar commit de libro")).to_be_visible()
+        page.get_by_label("Mensaje de commit").fill("Adaptacion docente del proyecto lector")
         screenshot(page, output_dir, "06-editor-content", full_page=False)
-        page.get_by_role("button", name="Guardar cambios").click()
+        page.get_by_role("button", name="Guardar y crear commit").click()
         page.wait_for_load_state("networkidle")
         expect(page.get_by_text("Cambios guardados en la rama users/ana-profe.")).to_be_visible()
         expect(page.get_by_text("Recursos anadidos: foto-de-clase.png.")).to_be_visible()

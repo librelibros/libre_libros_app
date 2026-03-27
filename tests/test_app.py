@@ -163,6 +163,8 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Fichas enlazables desde el documento" in response.text
     assert "2 col" in response.text
     assert "Ficha" in response.text
+    assert "Guardar y crear commit" in response.text
+    assert "Mensaje de commit" in response.text
 
 
 def test_can_create_and_edit_a_worksheet(tmp_path: Path):

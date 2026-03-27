@@ -19,13 +19,9 @@
           {% endfor %}
         </select>
       </label>
-      <label class="editor-field editor-field-commit">
-        Commit
-        <input type="text" name="commit_message" value="Update {{ book.title }}" />
-      </label>
       <div class="editor-primary-actions">
         <a class="button button-tonal" href="{{ cancel_href or ('/books/' ~ book.id ~ '?branch=' ~ selected_branch) }}">Cancelar</a>
-        <button class="button" type="submit">Guardar cambios</button>
+        <button class="button" type="button" data-open-save-dialog>Guardar</button>
       </div>
     </div>
 
@@ -53,7 +49,7 @@
           <p class="muted">El foco principal queda en el texto. Los medios se ven aquí mismo al soltarlos y la maquetación se ajusta desde el inspector derecho.</p>
         </div>
         <div class="editor-summary-bar">
-          <span class="chip">Rama activa: {{ selected_branch }}</span>
+          <span class="chip" data-active-branch-label>Rama activa: {{ selected_branch }}</span>
           <span class="chip">{{ resource_kind_label or "Libro" }}</span>
           <span class="chip">Preview paginada</span>
           <span class="chip">Medios con arrastrar y soltar</span>
@@ -250,6 +246,58 @@
     </div>
     <input type="hidden" name="book_id" value="{{ book.id }}" data-editor-book-id />
     <input type="hidden" name="preview_branch_name" value="{{ selected_branch }}" data-editor-branch />
+
+    <dialog class="editor-save-dialog" data-save-dialog>
+      <div class="editor-save-sheet stack">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Guardar</p>
+            <h3>Preparar commit de {{ resource_kind_label|default("libro")|lower }}</h3>
+            <p class="muted">Revisa la rama, resume el cambio y confirma lo que se va a versionar en este guardado.</p>
+          </div>
+        </div>
+
+        <div class="editor-save-summary grid two">
+          <article class="comment stack compact">
+            <p class="eyebrow">Destino</p>
+            <strong data-save-branch>{{ selected_branch }}</strong>
+            <span class="muted">{{ document_title or book.title }}</span>
+          </article>
+          <article class="comment stack compact">
+            <p class="eyebrow">Contenido detectado</p>
+            <div class="chip-group">
+              <span class="chip" data-save-columns>0 bloques en columnas</span>
+              <span class="chip" data-save-worksheets>0 enlaces a fichas</span>
+              <span class="chip" data-save-assets>0 assets pendientes</span>
+            </div>
+            <span class="muted" data-save-assets-detail>Sin archivos nuevos en esta edición.</span>
+          </article>
+        </div>
+
+        <label>
+          Mensaje de commit
+          <input
+            type="text"
+            name="commit_message"
+            value=""
+            placeholder="Resume el cambio. Si lo dejas vacío se generará automáticamente."
+            data-save-commit-input
+          />
+        </label>
+
+        <div class="comment stack compact">
+          <p class="eyebrow">Se guardará</p>
+          <ul class="editor-save-checklist" data-save-checklist>
+            <li>Documento Markdown actualizado.</li>
+          </ul>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="button button-tonal" data-close-save-dialog>Seguir editando</button>
+          <button type="submit" class="button">Guardar y crear commit</button>
+        </div>
+      </div>
+    </dialog>
   </form>
 </section>
 {% endblock %}
