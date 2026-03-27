@@ -110,6 +110,15 @@ def _pdf_asset_loader(book: Book, repo, branch_name: str):
     return load
 
 
+def _default_commit_message(book: Book, branch_name: str, uploaded_filenames: list[str] | None = None) -> str:
+    uploaded_filenames = uploaded_filenames or []
+    if uploaded_filenames:
+        if len(uploaded_filenames) == 1:
+            return f"Update {book.title} and add {uploaded_filenames[0]} on {branch_name}"
+        return f"Update {book.title} and add {len(uploaded_filenames)} assets on {branch_name}"
+    return f"Update {book.title} on {branch_name}"
+
+
 @router.get("")
 def list_books(
     request: Request,
@@ -334,10 +343,15 @@ async def save_book(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Edit not allowed")
     repo = repository_client_for(book.repository_source)
     asset_writes, uploaded_filenames = await _prepare_asset_writes(assets, book)
+    resolved_commit_message = commit_message.strip() or _default_commit_message(
+        book,
+        branch_name,
+        uploaded_filenames,
+    )
     repo.write_files(
         branch_name=branch_name,
         files=[RepositoryFileWrite(rel_path=book.content_path, content=content.encode("utf-8")), *asset_writes],
-        commit_message=commit_message,
+        commit_message=resolved_commit_message,
         author_name=user.full_name,
         author_email=user.email,
     )
@@ -495,7 +509,7 @@ async def upload_asset(
         rel_path=rel_path,
         branch_name=branch_name,
         content=data,
-        commit_message=f"Upload asset {filename}",
+        commit_message=_default_commit_message(book, branch_name, [filename]),
         author_name=user.full_name,
         author_email=user.email,
     )

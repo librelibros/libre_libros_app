@@ -1,4 +1,5 @@
 import os
+import subprocess
 from base64 import b64decode
 from pathlib import Path
 
@@ -151,47 +152,79 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
 
 def test_editor_save_persists_uploaded_assets_in_repository(tmp_path: Path):
     client = build_client(tmp_path)
+    with client:
+        login_response = client.post(
+            "/login",
+            data={"email": "admin@test.local", "password": "admin12345"},
+            follow_redirects=True,
+        )
+        assert login_response.status_code == 200
 
-    login_response = client.post(
-        "/login",
-        data={"email": "admin@test.local", "password": "admin12345"},
-        follow_redirects=True,
-    )
-    assert login_response.status_code == 200
+        response = client.post(
+            "/books/1/edit",
+            data={
+                "branch_name": "main",
+                "content": "# Lengua Demo\n\n![Nueva imagen](assets/mi-imagen.png)\n",
+                "commit_message": "Update with inline asset",
+            },
+            files=[("assets", ("Mi imagen.PNG", TEST_PNG, "image/png"))],
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "mi-imagen.png" in response.text
 
-    response = client.post(
-        "/books/1/edit",
-        data={
-            "branch_name": "main",
-            "content": "# Lengua Demo\n\n![Nueva imagen](assets/mi-imagen.png)\n",
-            "commit_message": "Update with inline asset",
-        },
-        files=[("assets", ("Mi imagen.PNG", TEST_PNG, "image/png"))],
-        follow_redirects=True,
-    )
-    assert response.status_code == 200
-    assert "mi-imagen.png" in response.text
+        asset_response = client.get("/books/1/assets/mi-imagen.png?branch=main")
+        assert asset_response.status_code == 200
+        assert asset_response.content == TEST_PNG
 
-    asset_response = client.get("/books/1/assets/mi-imagen.png?branch=main")
-    assert asset_response.status_code == 200
-    assert asset_response.content == TEST_PNG
+
+def test_editor_save_generates_commit_message_when_empty(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        login_response = client.post(
+            "/login",
+            data={"email": "admin@test.local", "password": "admin12345"},
+            follow_redirects=True,
+        )
+        assert login_response.status_code == 200
+
+        response = client.post(
+            "/books/1/edit",
+            data={
+                "branch_name": "main",
+                "content": "# Lengua Demo\n\nTexto actualizado.\n",
+                "commit_message": "   ",
+            },
+            follow_redirects=True,
+        )
+        assert response.status_code == 200
+        assert "Cambios guardados en la rama main." in response.text
+
+        commit_subject = subprocess.run(
+            ["git", "log", "-1", "--pretty=%s"],
+            cwd=tmp_path / "repo",
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        assert commit_subject == "Update Lengua Demo on main"
 
 
 def test_pdf_export_includes_embedded_images(tmp_path: Path):
     client = build_client(tmp_path)
+    with client:
+        login_response = client.post(
+            "/login",
+            data={"email": "admin@test.local", "password": "admin12345"},
+            follow_redirects=True,
+        )
+        assert login_response.status_code == 200
 
-    login_response = client.post(
-        "/login",
-        data={"email": "admin@test.local", "password": "admin12345"},
-        follow_redirects=True,
-    )
-    assert login_response.status_code == 200
-
-    response = client.get("/books/1/export/pdf?branch=main")
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/pdf")
-    assert response.content.startswith(b"%PDF")
-    assert b"/Subtype /Image" in response.content
+        response = client.get("/books/1/export/pdf?branch=main")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/pdf")
+        assert response.content.startswith(b"%PDF")
+        assert b"/Subtype /Image" in response.content
 
 
 def test_comment_can_be_deleted_by_author(tmp_path: Path):
