@@ -198,7 +198,7 @@ def run_browser_flow(base_url: str, output_dir: Path, headed: bool) -> list[Obse
         page.get_by_role("button", name="Filtrar").click()
         expect(page.get_by_role("heading", name="Libros disponibles")).to_be_visible()
         filtered_cards = page.locator("a.card.book-card")
-        expect(filtered_cards.first()).to_be_visible()
+        expect(filtered_cards.first).to_be_visible()
         screenshot(page, output_dir, "04-books-filtered")
         observations.append(
             Observation(
@@ -207,10 +207,11 @@ def run_browser_flow(base_url: str, output_dir: Path, headed: bool) -> list[Obse
             )
         )
 
-        first_book = filtered_cards.first()
+        first_book = filtered_cards.first
         book_title = first_book.locator("h3").inner_text()
         first_book.click()
         page.wait_for_load_state("networkidle")
+        current_book_url = page.url.split("?")[0]
         expect(page.locator(".document-index")).to_be_visible()
         expect(page.locator("[data-book-page].is-active article.markdown-body")).to_be_visible()
         expect(page.locator("img").first).to_be_visible()
@@ -231,6 +232,18 @@ def run_browser_flow(base_url: str, output_dir: Path, headed: bool) -> list[Obse
             Observation(
                 step="Enviar comentario",
                 result="El comentario se guarda y aparece en la seccion de detalle pedagogico.",
+            )
+        )
+
+        export_response = page.context.request.get(f"{current_book_url}/export/pdf?branch=main")
+        if not export_response.ok:
+            raise PlaywrightError(f"Exportacion PDF fallo con estado {export_response.status}")
+        pdf_path = output_dir / "book-export.pdf"
+        pdf_path.write_bytes(export_response.body())
+        observations.append(
+            Observation(
+                step="Exportar PDF",
+                result=f"La exportacion responde {export_response.status} y se guarda en {pdf_path.name}.",
             )
         )
 
@@ -266,18 +279,6 @@ def run_browser_flow(base_url: str, output_dir: Path, headed: bool) -> list[Obse
             Observation(
                 step="Cerrar sesion",
                 result="La sesion finaliza y la app vuelve al formulario de acceso.",
-            )
-        )
-
-        export_response = page.context.request.get(f"{page.url.split('?')[0]}/export/pdf?branch=main")
-        if not export_response.ok:
-            raise PlaywrightError(f"Exportacion PDF fallo con estado {export_response.status}")
-        pdf_path = output_dir / "book-export.pdf"
-        pdf_path.write_bytes(export_response.body())
-        observations.append(
-            Observation(
-                step="Exportar PDF",
-                result=f"La exportacion responde {export_response.status} y se guarda en {pdf_path.name}.",
             )
         )
 

@@ -6,3 +6,5 @@ __pycache__/
 .pytest_cache/
 data/*.db
 data/repos/
+test_plan/*
+!test_plan/README.md
