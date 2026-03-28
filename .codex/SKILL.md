@@ -8,6 +8,7 @@ description: Orchestrates end-to-end feature development through a multi-agent p
 ## Artifacts Directory
 
 All generated markdown artifacts are stored in `generated/` within the working directory. Create this directory at the start of execution if it does not exist.
+When the project has browser-based user flows, maintain a project-level `user_stories.md` that defines the full validation journeys.
 
 If `generated/project-context.md` exists, treat it as the shared cross-agent orientation file for this repository. Read it early in each phase to accelerate understanding, but always verify implementation details against the current codebase.
 
@@ -79,7 +80,9 @@ User Request
 8. Create the `generated/` directory at the start if it does not exist
 9. Unless the user explicitly opts out, the workflow must end with a git commit that captures the delivered changes
 10. Validation is not complete until the relevant automated tests and browser-based flows have been executed after the last code change
-11. Browser validation evidence must include screenshots plus one named video per executed user story
+11. Browser validation evidence must include screenshots plus one named `mp4` video per executed user story
+12. Browser videos should be easy to audit by humans, with short pauses between key actions and a visible click indicator when possible
+13. User-facing projects should maintain `user_stories.md` and browser validation should execute those stories from login to final expected outcome
 
 ## Subagent Launch Pattern
 
@@ -170,7 +173,7 @@ The Validator:
 3. Returns CRITICAL and MAJOR issues to Developer agents for immediate fix
 4. Updates [CODEBASE-ANALYST.md](CODEBASE-ANALYST.md) with guardrails so the agent includes them in future outputs
 5. Produces `generated/codebase-context-updates.md` summarizing what was added to `CODEBASE-ANALYST.md`
-6. Ensures browser evidence includes one video per user story with a stable descriptive filename
+6. Ensures browser evidence includes one `mp4` video per user story with a stable descriptive filename
 
 ### Feedback Loop
 
@@ -196,7 +199,7 @@ Launch a subagent with the contents of [UX-REFINEMENT.md](UX-REFINEMENT.md).
 
 This phase runs only after the Validator has reached `APPROVED`.
 
-**Input**: Tell the subagent to read `generated/feature-spec.md`, `generated/ux-spec.md`, `generated/validation-report.md`, and the latest relevant evidence under `test_plan/`, including screenshots, user-story videos, and `run-log.md`
+**Input**: Tell the subagent to read `generated/feature-spec.md`, `generated/ux-spec.md`, `generated/validation-report.md`, `user_stories.md`, and the latest relevant evidence under `test_plan/`, including screenshots, user-story videos, and `run-log.md`
 **Output**: Code changes + `generated/ux-refinement-report.md` + a fresh evidence folder such as `test_plan/<date>-ux-refinement/`
 
 The UX Refinement agent:
@@ -233,7 +236,7 @@ Feature Development Progress:
 - [ ] Phase 6a: Validator subagent updates CODEBASE-ANALYST.md with guardrails
 - [ ] Phase 6b: Developer subagents fix CRITICAL/MAJOR issues (if any, max 2 iterations)
 - [ ] Phase 7: UX Refinement subagent reviews `test_plan/` evidence and applies UI improvements
-- [ ] Phase 7a: UX Refinement subagent refreshes screenshots, user-story videos, and run logs after the UI changes
+- [ ] Phase 7a: UX Refinement subagent refreshes screenshots, `mp4` user-story videos, and run logs after the UI changes
 - [ ] Phase 8: Final verification commands are executed after the last code change
 - [ ] Phase 8a: A final git commit is created for the delivered work
 - [ ] Feature delivered

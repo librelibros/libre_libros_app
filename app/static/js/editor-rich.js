@@ -25046,7 +25046,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   function canConvert(input) {
     return input != null && (typeof input === "string" || input.nodeType && (input.nodeType === 1 || input.nodeType === 9 || input.nodeType === 11));
   }
-  var turndown_browser_es_default = TurndownService;
 
   // frontend/editor/index.js
   var PAGEBREAK_MARKER = "<!-- pagebreak -->";
@@ -25282,64 +25281,93 @@ Please report this to https://github.com/markedjs/marked.`, e) {
     flushBuffer();
     return fragments.join("\n");
   }
-  function buildTurndown() {
-    const service = new turndown_browser_es_default({
-      bulletListMarker: "-",
-      headingStyle: "atx",
-      codeBlockStyle: "fenced"
-    });
-    service.keep(["audio"]);
-    service.addRule("pageBreak", {
-      filter: (node) => node.nodeName === "HR" && node.getAttribute("data-pagebreak") === "true",
-      replacement: () => `
-
-${PAGEBREAK_MARKER}
-
-`
-    });
-    service.addRule("worksheetLink", {
-      filter: (node) => node.nodeName === "A" && node.getAttribute("data-worksheet-slug"),
-      replacement: (_content, node) => {
-        const slug = node.getAttribute("data-worksheet-slug");
-        const label = (node.textContent || slug || "").trim();
-        return `[[worksheet:${slug}|${label}]]`;
+  function serializeTextWithMarks(node) {
+    let value = node.text || "";
+    const marks = [...node.marks || []];
+    const order = { bold: 1, italic: 2, link: 3 };
+    marks.sort((left, right) => (order[left.type] || 99) - (order[right.type] || 99));
+    marks.forEach((mark) => {
+      if (mark.type === "bold") value = `**${value}**`;
+      if (mark.type === "italic") value = `*${value}*`;
+      if (mark.type === "link") {
+        const attrs = mark.attrs || {};
+        if (attrs.dataWorksheetSlug) {
+          value = `[[worksheet:${attrs.dataWorksheetSlug}|${value}]]`;
+        } else if (attrs.href) {
+          value = `[${value}](${attrs.href})`;
+        }
       }
     });
-    service.addRule("richImage", {
-      filter: (node) => node.nodeName === "IMG" && node.getAttribute("data-asset-path"),
-      replacement: (_content, node) => {
-        const path = node.getAttribute("data-asset-path") || node.getAttribute("src") || "";
-        const alt = node.getAttribute("alt") || "";
-        const classValue = node.getAttribute("class") || buildMediaClass();
-        const classes = classValue.split(/\s+/).filter((value) => value && value !== "ProseMirror-selectednode").map((value) => `.${value}`).join(" ");
-        return `![${alt}](${path}){: ${classes}}`;
-      }
+    return value;
+  }
+  function serializeInlineNodes(nodes = []) {
+    return nodes.map((node) => {
+      if (node.type === "text") return serializeTextWithMarks(node);
+      if (node.type === "hardBreak") return "  \n";
+      return serializeNode(node);
+    }).join("");
+  }
+  function serializeListItem(node, prefix) {
+    const blocks = (node.content || []).map((child) => serializeNode(child)).filter(Boolean);
+    if (!blocks.length) return prefix.trimEnd();
+    const firstLines = blocks[0].split("\n");
+    const lines = [`${prefix}${firstLines[0]}`];
+    firstLines.slice(1).forEach((line) => lines.push(line ? `  ${line}` : ""));
+    blocks.slice(1).forEach((block) => {
+      block.split("\n").forEach((line) => lines.push(line ? `  ${line}` : ""));
     });
-    service.addRule("audioBlock", {
-      filter: (node) => node.nodeName === "AUDIO" && (node.getAttribute("data-asset-path") || node.getAttribute("src")),
-      replacement: (_content, node) => {
-        const path = node.getAttribute("data-asset-path") || node.getAttribute("src") || "";
-        return `<audio controls src="${path}"></audio>`;
-      }
+    return lines.join("\n");
+  }
+  function serializeList(node, ordered = false) {
+    return (node.content || []).map((item, index) => serializeListItem(item, ordered ? `${index + 1}. ` : "- ")).join("\n");
+  }
+  function serializeColumns(node) {
+    const count = Number(node.attrs?.count || (node.content || []).length || 2);
+    const columns = (node.content || []).map((column) => {
+      const content = serializeBlocks(column.content || []);
+      return content || "_Columna vacia_";
     });
-    service.addRule("columnsBlock", {
-      filter: (node) => node.nodeName === "DIV" && node.getAttribute("data-layout") === "columns",
-      replacement: (_content, node) => {
-        const count = Number(node.getAttribute("data-count") || 2);
-        const columns = [...node.querySelectorAll(":scope > div[data-layout-column]")].map((column) => {
-          const converted = service.turndown(column.innerHTML).trim();
-          return converted || "Escribe aqu\xED el contenido de la columna.";
-        });
-        return `
-
-[[columns:${count}]]
+    return `[[columns:${count}]]
 ${columns.join("\n[[col]]\n")}
-[[/columns]]
-
-`;
-      }
-    });
-    return service;
+[[/columns]]`;
+  }
+  function serializeImage(node) {
+    const attrs = node.attrs || {};
+    const path = attrs.dataAssetPath || attrs.src || "";
+    const alt = attrs.alt || "";
+    const classValue = attrs.class || buildMediaClass();
+    const classes = classValue.split(/\s+/).filter((value) => value && value !== "ProseMirror-selectednode").map((value) => `.${value}`).join(" ");
+    return `![${alt}](${path}){: ${classes}}`;
+  }
+  function serializeAudio(node) {
+    const attrs = node.attrs || {};
+    const path = attrs.dataAssetPath || attrs.src || "";
+    return `<audio controls src="${path}"></audio>`;
+  }
+  function serializeNode(node) {
+    if (!node) return "";
+    if (node.type === "text") return serializeTextWithMarks(node);
+    if (node.type === "paragraph") return serializeInlineNodes(node.content || []).trim();
+    if (node.type === "heading") return `${"#".repeat(node.attrs?.level || 2)} ${serializeInlineNodes(node.content || []).trim()}`.trim();
+    if (node.type === "bulletList") return serializeList(node, false);
+    if (node.type === "orderedList") return serializeList(node, true);
+    if (node.type === "blockquote") {
+      return serializeBlocks(node.content || []).split("\n").map((line) => line ? `> ${line}` : ">").join("\n");
+    }
+    if (node.type === "pageBreak") return PAGEBREAK_MARKER;
+    if (node.type === "columnsBlock") return serializeColumns(node);
+    if (node.type === "columnBlock") return serializeBlocks(node.content || []);
+    if (node.type === "image") return serializeImage(node);
+    if (node.type === "audioBlock") return serializeAudio(node);
+    if (node.type === "horizontalRule") return "---";
+    return serializeInlineNodes(node.content || []).trim();
+  }
+  function serializeBlocks(nodes = []) {
+    return nodes.map((node) => serializeNode(node)).filter((value) => value && value.trim()).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function serializeEditorDocument(editor) {
+    const documentJson = editor.getJSON();
+    return serializeBlocks(documentJson.content || []);
   }
   function buildPendingAssetSummary(files) {
     return files.length ? files.map((file) => sanitizeAssetFilename(file.name)).join(", ") : "Sin archivos nuevos en esta sesi\xF3n.";
@@ -25545,10 +25573,10 @@ ${columns.join("\n[[col]]\n")}
     initializeBookDocuments(preview);
     hydrateDraftAssetsInPreview(form);
   }
-  function syncMarkdownFromEditor(form, editor, turndown) {
+  function syncMarkdownFromEditor(form, editor) {
     const textarea = form.querySelector("[data-editor-input]");
     if (!textarea) return;
-    textarea.value = turndown.turndown(editor.getHTML()).trim();
+    textarea.value = serializeEditorDocument(editor);
     updateSaveSummary(form);
     if (form._richState.mode === "preview") {
       window.clearTimeout(form._richState.previewTimer);
@@ -25658,7 +25686,6 @@ ${columns.join("\n[[col]]\n")}
       objectUrls: /* @__PURE__ */ new Map(),
       previewTimer: null
     };
-    const turndown = buildTurndown();
     const initialHtml = markdownToEditorHtml(hiddenTextarea.value, form);
     const editor = new Editor({
       element: host,
@@ -25679,11 +25706,11 @@ ${columns.join("\n[[col]]\n")}
         ColumnBlock
       ],
       content: initialHtml,
-      onUpdate: () => syncMarkdownFromEditor(form, editor, turndown),
+      onUpdate: () => syncMarkdownFromEditor(form, editor),
       onSelectionUpdate: () => showMediaToolbar(form, editor)
     });
     form._richState.editor = editor;
-    syncMarkdownFromEditor(form, editor, turndown);
+    syncMarkdownFromEditor(form, editor);
     renderPendingAssets(form);
     showMediaToolbar(form, editor);
     form.querySelectorAll("[data-rich-mode-button]").forEach((button) => {

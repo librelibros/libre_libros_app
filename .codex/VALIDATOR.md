@@ -11,6 +11,7 @@ Review all code changes produced by the Developer agents. Evaluate quality again
 - `generated/technical-plan.md`: The task breakdown and acceptance criteria
 - `generated/codebase-context.md`: Project technologies, conventions, and patterns
 - `generated/ux-spec.md`: UX baseline, component guidance, and interaction constraints
+- `user_stories.md`: Full end-to-end user stories to validate in the browser when the feature is user-facing
 - Task reports from each Developer agent
 
 ## Process
@@ -82,27 +83,35 @@ Run end-to-end usage tests against the running project before approval:
 2. Run the relevant automated test suite for the changed areas before or during the usage test pass, and record the exact commands and outcomes
 3. Create `test_plan/` in the project root if it does not exist
 4. Create a dated execution folder such as `test_plan/2026-03-27-smoke/`
-5. Execute several user histories step by step in a real browser, not only API calls. At minimum cover:
-   - login/logout
+5. Execute several complete user stories step by step in a real browser, not only API calls
+6. Use `user_stories.md` as the source of truth for browser validation when it exists
+7. Each executed story must cover the whole path from the login screen or access entry point up to the business result that closes the story
+8. At minimum, the user story set must cover:
+   - login and access
    - opening the book catalogue
    - filtering books by course and subject
    - opening a book detail page
    - editing or previewing markdown when the feature exists
    - one admin flow when the project contains administration features
-6. Capture a screenshot at each relevant step and store it in the execution folder
-7. Record one browser video per executed user story and store it in the same execution folder
-8. Name each video after the user story it validates, using a stable readable slug such as:
-   - `user-story-login-y-acceso.webm`
-   - `user-story-filtrar-catalogo.webm`
-   - `user-story-editar-libro-y-guardar.webm`
-9. Start each recording before the first interaction of that story and stop it only after the success or failure state that closes the story
-10. Treat the video set as mandatory evidence for browser-based validation, not as an optional artifact
-11. For user-facing flows, make the screenshot set usable for later UX analysis:
+9. Capture a screenshot at each relevant step and store it in the execution folder
+10. Record one browser video in `mp4` format per executed user story and store it in the same execution folder
+11. Name each video after the user story it validates, using a stable readable slug such as:
+   - `user-story-login-y-acceso.mp4`
+   - `user-story-filtrar-catalogo.mp4`
+   - `user-story-editar-varias-columnas.mp4`
+12. Start each recording before the first interaction of that story and stop it only after the success or failure state that closes the story
+13. Make the recorded flow readable for human review:
+   - add short pauses between key actions, around 2 to 3 seconds when possible
+   - show a visible click marker or equivalent pointer feedback in the video
+   - avoid recordings that jump too quickly between steps to be auditable
+14. Treat the video set as mandatory evidence for browser-based validation, not as an optional artifact
+15. For user-facing flows, make the screenshot set usable for later UX analysis:
    - capture the full page whenever possible, not only cropped widgets
    - include at least one mobile-width or narrow viewport capture when the surface is responsive
    - preserve the natural state of the interface, including empty, populated, and validation/error moments when they appear
-12. Record a chronological log in the same folder, for example `run-log.md`, including:
+16. Record a chronological log in the same folder, for example `run-log.md`, including:
    - exact environment used
+   - reference to `user_stories.md`
    - URLs visited
    - credentials or seeded users used for testing
    - user actions performed step by step
@@ -110,8 +119,8 @@ Run end-to-end usage tests against the running project before approval:
    - console errors, server logs, and failing requests when present
    - automated test commands executed and whether they passed
    - video file name associated with each executed user story
-13. Use the observed failures and generated logs to iterate the project until the tested user histories pass, within the validator loop limit
-14. If browser automation is available, use it. If not, use a manually driven browser session and still persist screenshots, videos, and logs in `test_plan/`
+17. Use the observed failures and generated logs to iterate the project until the tested user histories pass, within the validator loop limit
+18. If browser automation is available, use it. If not, use a manually driven browser session and still persist screenshots, videos, and logs in `test_plan/`
 
 ### Step 8: Classify Findings
 
@@ -166,9 +175,10 @@ Then produce `generated/codebase-context-updates.md` summarizing all changes mad
 ## Usage Test Evidence
 | Artifact | Path | Notes |
 |----------|------|-------|
+| User stories source | `user_stories.md` | [stories executed during validation] |
 | Browser run log | `test_plan/.../run-log.md` | [summary of executed user histories] |
 | Screenshot set | `test_plan/...` | [list or summary of captured steps] |
-| User story videos | `test_plan/.../user-story-*.webm` | [one video per executed story, named after the story] |
+| User story videos | `test_plan/.../user-story-*.mp4` | [one full-flow video per executed story, named after the story] |
 | Server logs | `test_plan/.../server.log` | [if collected] |
 | Automated tests | [command list] | [what passed or failed] |
 

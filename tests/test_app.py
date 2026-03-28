@@ -10,6 +10,17 @@ from fastapi.testclient import TestClient
 TEST_PNG = b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0xQAAAAASUVORK5CYII="
 )
+BROKEN_RASTER_PNG = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "repo"
+    / "books"
+    / "primaria"
+    / "lengua"
+    / "lengua-primaria"
+    / "assets"
+    / "column-demo-image.png"
+).read_bytes()
 
 
 def build_client(tmp_path: Path):
@@ -31,7 +42,8 @@ def build_client(tmp_path: Path):
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='#2457c5'/></svg>",
         encoding="utf-8",
     )
-    (book_dir / "assets" / "aula.png").write_bytes(TEST_PNG)
+    (book_dir / "assets" / "aula.png").write_bytes(BROKEN_RASTER_PNG)
+    (book_dir / "assets" / ".gitkeep").write_text("", encoding="utf-8")
     os.environ["LIBRE_LIBROS_EXAMPLE_REPO_PATH"] = str(example_repo)
     os.environ["LIBRE_LIBROS_INIT_ADMIN_EMAIL"] = "admin@test.local"
     os.environ["LIBRE_LIBROS_INIT_ADMIN_PASSWORD"] = "admin12345"
@@ -166,6 +178,7 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Recursos" in response.text
     assert "Resumen del guardado" in response.text
     assert "Ctrl/Cmd+S" in response.text
+    assert ".gitkeep" not in response.text
 
 
 def test_can_create_and_edit_a_worksheet(tmp_path: Path):

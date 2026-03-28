@@ -18,6 +18,21 @@ REPO_ROOT = PROJECT_DIR.parent
 TEST_PLAN_DIR = PROJECT_DIR / "test_plan"
 
 
+def snapshot_example_repo(repo_path: Path) -> None:
+    subprocess.run(["git", "-C", str(repo_path), "config", "user.name", "Codex Validator"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "config", "user.email", "validator@local.test"], check=True)
+    status = subprocess.run(
+        ["git", "-C", str(repo_path), "status", "--short"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if not status:
+        return
+    subprocess.run(["git", "-C", str(repo_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo_path), "commit", "-m", "Prepare validator snapshot"], check=True)
+
+
 def build_output_dir(suffix: str) -> Path:
     output_dir = TEST_PLAN_DIR / f"{date.today().isoformat()}-{suffix}"
     if output_dir.exists():
@@ -30,6 +45,7 @@ def prepare_example_repo(output_dir: Path) -> Path:
     source_repo = REPO_ROOT / "data" / "repo"
     copied_repo = output_dir / "example-repo"
     shutil.copytree(source_repo, copied_repo)
+    snapshot_example_repo(copied_repo)
     return copied_repo
 
 

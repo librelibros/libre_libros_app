@@ -50,6 +50,8 @@ def _asset_entries(book: Book, branch_name: str) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for rel_path in sorted(files):
         filename = rel_path.split("/")[-1]
+        if filename.startswith("."):
+            continue
         media_type = mimetypes.guess_type(filename)[0] or ""
         entries.append(
             {

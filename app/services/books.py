@@ -5,6 +5,8 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 from markdown import markdown
+from PIL import Image as PILImage
+from PIL import ImageFile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.utils import ImageReader
@@ -22,6 +24,7 @@ MARKDOWN_IMAGE_PATTERN = re.compile(
 )
 MARKDOWN_ORDERED_ITEM_PATTERN = re.compile(r"^(?P<index>\d+)\.\s+(?P<body>.+)$")
 MARKDOWN_UNORDERED_ITEM_PATTERN = re.compile(r"^[-*]\s+(?P<body>.+)$")
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def default_book_paths(course: str, subject: str, slug: str) -> tuple[str, str]:
@@ -149,13 +152,24 @@ def _build_pdf_image_flowable(asset_path: str, asset_bytes: bytes, max_width: fl
         drawing.hAlign = "CENTER"
         return drawing
 
-    source = BytesIO(asset_bytes)
+    normalized_bytes = _normalize_raster_asset(asset_bytes)
+    source = BytesIO(normalized_bytes)
     reader = ImageReader(source)
     original_width, original_height = reader.getSize()
     width, height = _scaled_dimensions(original_width, original_height, max_width, max_height)
-    image = PDFImage(BytesIO(asset_bytes), width=width, height=height)
+    image = PDFImage(BytesIO(normalized_bytes), width=width, height=height)
     image.hAlign = "CENTER"
     return image
+
+
+def _normalize_raster_asset(asset_bytes: bytes) -> bytes:
+    with PILImage.open(BytesIO(asset_bytes)) as image:
+        image.load()
+        normalized = image.convert("RGBA") if image.mode not in {"RGB", "RGBA"} else image.copy()
+
+    buffer = BytesIO()
+    normalized.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def _scaled_dimensions(original_width: float, original_height: float, max_width: float, max_height: float) -> tuple[float, float]:

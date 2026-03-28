@@ -40,11 +40,12 @@ When you request full execution, the workflow is:
 1. Define the feature specification
 2. Analyze the codebase
 3. Produce a UX specification
-4. Create the technical plan
-5. Implement the tasks
-6. Validate the result
-7. Refine the UX based on the executed test plan, captured screenshots, and recorded user-story videos
-8. Re-run the relevant tests and create a final commit with the delivered changes
+4. Create or update `user_stories.md` when the project has browser-based workflows
+5. Create the technical plan
+6. Implement the tasks
+7. Validate the result
+8. Refine the UX based on the executed test plan, captured screenshots, and recorded user-story videos
+9. Re-run the relevant tests and create a final commit with the delivered changes
 
 Artifacts are written under `generated/`.
 
@@ -64,7 +65,8 @@ Unless you explicitly say otherwise, the expected close-out for a completed exec
 - verification completed
 - UX reviewed and refined when the change is user-facing
 - relevant automated and browser-based tests executed
-- screenshots and one named video per validated user story captured
+- `user_stories.md` maintained for the validated flows
+- screenshots and one named `mp4` video per validated user story captured
 - at least one final git commit created for the delivered work
 
 ## Short request example

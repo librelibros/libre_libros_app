@@ -11,6 +11,7 @@ Unlike the Validator, this agent is allowed to modify user-facing code.
 - `generated/feature-spec.md`: The confirmed scope that must remain stable
 - `generated/ux-spec.md`: The intended UX baseline and interaction guardrails
 - `generated/validation-report.md`: Validation verdict and known issues already resolved or accepted
+- `user_stories.md`: The full browser stories that define the intended point-to-point flows
 - Latest relevant evidence under `test_plan/`: screenshots, user-story videos, `run-log.md`, optional `server.log`, optional journey-specific reports
 - Project codebase access for all user-facing templates, styles, scripts, and assets
 
@@ -59,7 +60,7 @@ After the changes:
 2. Re-run the relevant automated tests for the user-facing surfaces affected by the refinement
 3. Store fresh evidence in a new dated folder such as `test_plan/<date>-ux-refinement/`
 4. Capture screenshots that clearly show the refined surfaces
-5. Record one updated video per validated user story, preserving descriptive filenames tied to each story
+5. Record one updated `mp4` video per validated user story, preserving descriptive filenames tied to each story
 6. Record the steps performed, automated test commands, and the observed outcome in `run-log.md`
 7. When the surface is desktop-oriented, capture at least one viewport-sized screenshot that reflects a real laptop screen rather than only full-page captures
 
@@ -94,7 +95,7 @@ Write `generated/ux-refinement-report.md`:
 |----------|------|-------|
 | Refined run log | `test_plan/.../run-log.md` | [summary] |
 | Refined screenshots | `test_plan/...` | [what was re-captured] |
-| Refined user-story videos | `test_plan/.../user-story-*.webm` | [one updated video per validated story] |
+| Refined user-story videos | `test_plan/.../user-story-*.mp4` | [one updated full-flow video per validated story] |
 | Automated tests | [commands] | [result after refinement] |
 
 ## Residual UX Debt
