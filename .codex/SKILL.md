@@ -42,7 +42,7 @@ User Request
      |
      v
 [UX-REFINEMENT] --> evidence-led UI improvements
-     |               + refreshed screenshots/logs
+     |               + refreshed screenshots/videos/logs
      v
  [FINALIZE] --> final test pass + intentional commit
      |
@@ -64,7 +64,7 @@ User Request
 | Technical Product Manager | Break feature into atomic tasks with project context | `generated/feature-spec.md` + `generated/codebase-context.md` + `generated/ux-spec.md` + codebase | `generated/technical-plan.md` |
 | Developer (x N) | Implement atomic tasks in parallel | Single task from `generated/technical-plan.md` | Code changes + `generated/task-report-XXX.md` |
 | Validator | Review code quality (never modifies code), research best practices online, update CODEBASE-ANALYST.md with guardrails | All changes + all artifacts in `generated/` | `generated/validation-report.md` + `generated/codebase-context-updates.md` |
-| UX Refinement | Use executed test evidence and screenshots to modernize and polish the UI | `generated/ux-spec.md` + `generated/validation-report.md` + latest `test_plan/` evidence + codebase | Code changes + `generated/ux-refinement-report.md` + refreshed `test_plan/` evidence |
+| UX Refinement | Use executed test evidence, screenshots, and user-story videos to modernize and polish the UI | `generated/ux-spec.md` + `generated/validation-report.md` + latest `test_plan/` evidence + codebase | Code changes + `generated/ux-refinement-report.md` + refreshed `test_plan/` evidence |
 | Finalize | Re-run relevant tests after all fixes and refinements, review git scope, and create the final commit | Latest code + generated artifacts + latest `test_plan/` evidence | Passed verification commands + git commit |
 
 ## Execution Rules
@@ -79,6 +79,7 @@ User Request
 8. Create the `generated/` directory at the start if it does not exist
 9. Unless the user explicitly opts out, the workflow must end with a git commit that captures the delivered changes
 10. Validation is not complete until the relevant automated tests and browser-based flows have been executed after the last code change
+11. Browser validation evidence must include screenshots plus one named video per executed user story
 
 ## Subagent Launch Pattern
 
@@ -169,6 +170,7 @@ The Validator:
 3. Returns CRITICAL and MAJOR issues to Developer agents for immediate fix
 4. Updates [CODEBASE-ANALYST.md](CODEBASE-ANALYST.md) with guardrails so the agent includes them in future outputs
 5. Produces `generated/codebase-context-updates.md` summarizing what was added to `CODEBASE-ANALYST.md`
+6. Ensures browser evidence includes one video per user story with a stable descriptive filename
 
 ### Feedback Loop
 
@@ -194,7 +196,7 @@ Launch a subagent with the contents of [UX-REFINEMENT.md](UX-REFINEMENT.md).
 
 This phase runs only after the Validator has reached `APPROVED`.
 
-**Input**: Tell the subagent to read `generated/feature-spec.md`, `generated/ux-spec.md`, `generated/validation-report.md`, and the latest relevant evidence under `test_plan/`, including screenshots and `run-log.md`
+**Input**: Tell the subagent to read `generated/feature-spec.md`, `generated/ux-spec.md`, `generated/validation-report.md`, and the latest relevant evidence under `test_plan/`, including screenshots, user-story videos, and `run-log.md`
 **Output**: Code changes + `generated/ux-refinement-report.md` + a fresh evidence folder such as `test_plan/<date>-ux-refinement/`
 
 The UX Refinement agent:
@@ -202,7 +204,7 @@ The UX Refinement agent:
 2. Identifies friction in hierarchy, spacing, readability, responsiveness, feedback states, and visual consistency
 3. Explicitly checks whether the primary workflow fits well in a common laptop viewport such as 1366x768 or 1280x720 without excessive scrolling
 4. Applies the necessary user-facing code changes to move the UI toward a modern, usable, visually pleasant front end without changing product scope
-5. Re-runs the relevant flow after refinement and stores updated screenshots and logs so the improvements are traceable
+5. Re-runs the relevant flow after refinement and stores updated screenshots, user-story videos, and logs so the improvements are traceable
 
 ## Phase 8: Finalize and Commit
 
@@ -231,7 +233,7 @@ Feature Development Progress:
 - [ ] Phase 6a: Validator subagent updates CODEBASE-ANALYST.md with guardrails
 - [ ] Phase 6b: Developer subagents fix CRITICAL/MAJOR issues (if any, max 2 iterations)
 - [ ] Phase 7: UX Refinement subagent reviews `test_plan/` evidence and applies UI improvements
-- [ ] Phase 7a: UX Refinement subagent refreshes screenshots and run logs after the UI changes
+- [ ] Phase 7a: UX Refinement subagent refreshes screenshots, user-story videos, and run logs after the UI changes
 - [ ] Phase 8: Final verification commands are executed after the last code change
 - [ ] Phase 8a: A final git commit is created for the delivered work
 - [ ] Feature delivered
