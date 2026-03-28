@@ -125,46 +125,36 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
 
         page.get_by_role("link", name="Editar").first.click()
         page.wait_for_load_state("networkidle")
-        page.get_by_label("Rama").select_option("users/ana-profe")
+        page.get_by_label("Espacio de trabajo").select_option("users/ana-profe")
+        page.get_by_role("button", name="Recursos").click()
+        page.locator("[data-insert-worksheet]").first.click()
+        page.get_by_role("button", name="Edición").click()
+        page.get_by_role("button", name="2 columnas").click()
         drop_file(page, "[data-editor-surface]", upload_file, "image/png")
-        expect(page.get_by_text("Se añadirán en este guardado")).to_be_visible()
-        expect(page.locator("[data-selected-asset-name]")).to_have_value("foto-de-clase.png")
         expect(page.locator("[data-inline-assets] img")).to_be_visible()
-        page.get_by_label("Texto alternativo").fill("Foto de clase")
-        page.get_by_label("Posición").select_option("right")
-        page.get_by_label("Tamaño").select_option("50")
         screenshot(page, output_dir, "05-editor-assets", full_page=False)
-        observations.append(Observation("Preparar recurso", "La profesora arrastra una imagen al lienzo, la ve de inmediato en el editor y ajusta su bloque visual antes de guardar."))
-
-        page.get_by_role("button", name="Vista").click()
-        expect(page.get_by_alt_text("Foto de clase").first).to_be_visible()
-
-        textarea = page.locator("[data-editor-input]")
-        textarea.evaluate(
-            """(el) => {
-              el.value = el.value
-                .split("\\n")
-                .filter((line) => !line.includes("assets/foto-de-clase.png"))
-                .join("\\n");
-              el.dispatchEvent(new Event("input"));
-            }"""
+        observations.append(
+            Observation(
+                "Preparar recurso",
+                "La profesora inserta una ficha, añade un bloque de dos columnas y arrastra una imagen al mismo lienzo de edición.",
+            )
         )
-        update_textarea(page, "![Foto de clase](assets/foto-de-clase.png){: .doc-image .doc-align-right .doc-w-50}")
+
+        page.get_by_role("button", name="Lectura").click()
+        expect(page.locator("[data-rich-preview] .document-page").first).to_be_visible()
         page.get_by_role("button", name="Guardar").click()
-        expect(page.get_by_role("heading", name="Preparar commit de libro")).to_be_visible()
-        page.get_by_label("Mensaje de commit").fill("Adaptacion docente del proyecto lector")
+        expect(page.get_by_role("heading", name="Guardar cambios del material")).to_be_visible()
+        page.get_by_label("Resumen del guardado").fill("Adaptacion docente del proyecto lector")
         screenshot(page, output_dir, "06-editor-content", full_page=False)
-        page.get_by_role("button", name="Guardar y crear commit").click()
+        page.get_by_role("button", name="Guardar cambios").click()
         page.wait_for_load_state("networkidle")
         expect(page.get_by_text("Cambios guardados en la rama users/ana-profe.")).to_be_visible()
         expect(page.get_by_text("Recursos anadidos: foto-de-clase.png.")).to_be_visible()
-        page.locator(".toc-link").filter(has_text="Proyecto de lectura en voz alta").first.click()
-        expect(page.locator(".document-page.is-active h2", has_text="Proyecto de lectura en voz alta")).to_be_visible()
         screenshot(page, output_dir, "07-detail-updated")
         observations.append(
             Observation(
                 "Modificar y guardar",
-                "La profesora elimina una parte del contenido, anade una nueva actividad con una imagen maquetada y guarda los cambios en su rama personal.",
+                "La profesora revisa la lectura final y guarda los cambios desde un modal de lenguaje docente en su espacio personal.",
             )
         )
 

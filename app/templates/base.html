@@ -6,6 +6,7 @@
     <title>{{ app_name }}{% if title %} · {{ title }}{% endif %}</title>
     <link rel="stylesheet" href="/static/css/app.css" />
     <script defer src="/static/js/editor.js"></script>
+    {% block head_scripts %}{% endblock %}
   </head>
   <body>
     <div class="shell">
@@ -50,5 +51,6 @@
         {% block content %}{% endblock %}
       </main>
     </div>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

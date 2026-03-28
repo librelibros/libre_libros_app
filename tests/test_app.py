@@ -154,18 +154,17 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
 
     response = client.get("/books/1/edit?branch=main")
     assert response.status_code == 200
-    assert "Recursos disponibles en main" in response.text
+    assert "Biblioteca del material" in response.text
     assert "cover.svg" in response.text
-    assert "Preparar bloque" in response.text
-    assert "Configurar inserción" in response.text
-    assert "Suelta archivos aquí o encima del área de texto" in response.text
-    assert "Lo que acabas de soltar aparece aquí" in response.text
-    assert 'data-editor-tab-button="library"' in response.text
-    assert "Fichas enlazables desde el documento" in response.text
-    assert "2 col" in response.text
-    assert "Ficha" in response.text
-    assert "Guardar y crear commit" in response.text
-    assert "Mensaje de commit" in response.text
+    assert "Guardar cambios del material" in response.text
+    assert "Suelta archivos aquí o en la hoja de edición" in response.text
+    assert "Se guardarán con este material" in response.text
+    assert "Edición directa" in response.text
+    assert "Insertar en el documento" in response.text
+    assert "2 columnas" in response.text
+    assert "Lectura" in response.text
+    assert "Recursos" in response.text
+    assert "Resumen del guardado" in response.text
     assert "Ctrl/Cmd+S" in response.text
 
 

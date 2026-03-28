@@ -1,0 +1,19 @@
+{
+  "name": "libre-libros-app",
+  "private": true,
+  "scripts": {
+    "build:editor": "node scripts/build-editor.mjs"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.0.7",
+    "@tiptap/extension-image": "^3.0.7",
+    "@tiptap/extension-link": "^3.0.7",
+    "@tiptap/extension-placeholder": "^3.0.7",
+    "@tiptap/starter-kit": "^3.0.7",
+    "marked": "^16.3.0",
+    "turndown": "^7.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.10"
+  }
+}

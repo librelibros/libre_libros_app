@@ -1,204 +1,315 @@
 {% extends "base.html" %}
 {% set title = editor_page_title or ("Editar " ~ book.title) %}
+{% block scripts %}
+<script defer src="/static/js/editor-rich.js"></script>
+{% endblock %}
 {% block content %}
-<section class="card stack editor-shell">
+<section class="card stack editor-shell editor-shell-rich">
   <div class="section-header editor-page-head">
     <div>
-      <p class="eyebrow">Edición Markdown</p>
+      <p class="eyebrow">Edición guiada</p>
       <h2>{{ document_title or book.title }}</h2>
-      <p class="muted">Edición comprimida para trabajar sin perder contexto: documento, vista previa y medios en una sola pantalla.</p>
+      <p class="muted">Escribe como en un procesador de texto, cambia a lectura cuando quieras y guarda sin vocabulario técnico.</p>
     </div>
   </div>
-  <form method="post" action="{{ save_action or ('/books/' ~ book.id ~ '/edit') }}" class="stack editor-form" data-markdown-editor enctype="multipart/form-data">
-    <div class="editor-command-bar">
+
+  <form
+    method="post"
+    action="{{ save_action or ('/books/' ~ book.id ~ '/edit') }}"
+    class="stack editor-form editor-form-rich"
+    data-rich-markdown-editor
+    enctype="multipart/form-data"
+  >
+    <input type="hidden" name="content" data-editor-input value="{{ content }}" />
+    <input type="hidden" name="book_id" value="{{ book.id }}" data-editor-book-id />
+    <input type="hidden" name="preview_branch_name" value="{{ selected_branch }}" data-editor-branch />
+    <input type="file" name="assets" accept="image/*,audio/mpeg" multiple hidden data-asset-input />
+
+    <div class="editor-command-bar editor-command-bar-rich">
       <label class="editor-field editor-field-branch">
-        Rama
-        <select name="branch_name">
+        Espacio de trabajo
+        <select name="branch_name" data-rich-branch>
           {% for branch in branches %}
-          <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
+          <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{% if branch == "main" %}Material compartido{% elif branch.startswith("users/") %}Espacio personal · {{ branch|replace("users/", "")|replace("-", " ")|title }}{% else %}{{ branch }}{% endif %}</option>
           {% endfor %}
         </select>
       </label>
-      <div class="editor-primary-actions">
-        <span class="chip">Ctrl/Cmd+S</span>
-        <a class="button button-tonal" href="{{ cancel_href or ('/books/' ~ book.id ~ '?branch=' ~ selected_branch) }}">Cancelar</a>
-        <button class="button" type="button" data-open-save-dialog>Guardar</button>
+
+      <div class="editor-office-actions">
+        <div class="editor-mode-switch" role="tablist" aria-label="Modo de trabajo del editor">
+          <button type="button" class="editor-icon-button is-active" data-rich-mode-button="edit" aria-selected="true" data-tooltip="Edición">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 19.5V16l9.8-9.8a1.6 1.6 0 0 1 2.3 0l1.7 1.7a1.6 1.6 0 0 1 0 2.3L8 20H4Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+              <path d="M12.5 7.5 16.5 11.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Edición</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-mode-button="preview" aria-selected="false" data-tooltip="Lectura">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2.5 12s3.5-5.5 9.5-5.5 9.5 5.5 9.5 5.5-3.5 5.5-9.5 5.5S2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+              <circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Lectura</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-mode-button="library" aria-selected="false" data-tooltip="Recursos">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h4l1.6 1.8H18A2.5 2.5 0 0 1 20.5 9.3v7.2A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5v-9Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Recursos</span>
+          </button>
+        </div>
+        <div class="editor-primary-actions">
+          <span class="chip">Ctrl/Cmd+S</span>
+          <a class="button button-tonal" href="{{ cancel_href or ('/books/' ~ book.id ~ '?branch=' ~ selected_branch) }}">Cancelar</a>
+          <button class="button" type="button" data-open-save-dialog>Guardar</button>
+        </div>
       </div>
     </div>
 
-    <div class="toolbar editor-toolbar">
-      <button type="button" data-editor-action="heading">H2</button>
-      <button type="button" data-editor-action="bold">Negrita</button>
-      <button type="button" data-editor-action="italic">Cursiva</button>
-      <button type="button" data-editor-action="list">Lista</button>
-      <button type="button" data-editor-action="quote">Cita</button>
-      <button type="button" data-editor-action="columns-2">2 col</button>
-      <button type="button" data-editor-action="columns-3">3 col</button>
-      <button type="button" data-editor-action="pagebreak">Salto</button>
-      <button type="button" data-editor-action="worksheet">Ficha</button>
-      <button type="button" data-editor-action="image">Imagen</button>
-      <button type="button" data-editor-action="audio">Audio</button>
+    <div class="editor-ribbon">
+      <section class="editor-ribbon-group">
+        <p class="eyebrow">Texto</p>
+        <div class="editor-ribbon-actions">
+          <button type="button" class="editor-icon-button" data-rich-command="paragraph" data-tooltip="Párrafo">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 7.5h14M5 11.5h14M5 15.5h9M5 19.5h9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Párrafo</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="heading" data-tooltip="Título">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6v12M12 6v12M6 12h6M16 7v10M16 12h3" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Título</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="bold" data-tooltip="Negrita">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 6h5a3 3 0 0 1 0 6H8Zm0 6h6a3 3 0 0 1 0 6H8Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Negrita</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="italic" data-tooltip="Cursiva">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 5h4M6 19h4M14 5 10 19" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Cursiva</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="bulletList" data-tooltip="Lista">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="6" cy="7" r="1.4" fill="currentColor"/>
+              <circle cx="6" cy="12" r="1.4" fill="currentColor"/>
+              <circle cx="6" cy="17" r="1.4" fill="currentColor"/>
+              <path d="M10 7h8M10 12h8M10 17h8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Lista</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="blockquote" data-tooltip="Cita">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 9H5.5A2.5 2.5 0 0 0 3 11.5v2A2.5 2.5 0 0 0 5.5 16H8v-3H5.5M19 9h-2.5a2.5 2.5 0 0 0-2.5 2.5v2a2.5 2.5 0 0 0 2.5 2.5H19v-3h-2.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Cita</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="editor-ribbon-group">
+        <p class="eyebrow">Maquetación</p>
+        <div class="editor-ribbon-actions">
+          <button type="button" class="editor-icon-button" data-rich-command="columns-2" data-tooltip="2 columnas">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="5" width="6.5" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <rect x="13.5" y="5" width="6.5" height="14" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">2 columnas</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="columns-3" data-tooltip="3 columnas">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3.5" y="5" width="4.5" height="14" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <rect x="9.75" y="5" width="4.5" height="14" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <rect x="16" y="5" width="4.5" height="14" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">3 columnas</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="pagebreak" data-tooltip="Salto de página">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 4.5h7l3 3V19.5H7Z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/>
+              <path d="M14 4.5v3h3M5 15h14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Salto de página</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="editor-ribbon-group">
+        <p class="eyebrow">Insertar</p>
+        <div class="editor-ribbon-actions">
+          <button type="button" class="editor-icon-button" data-rich-command="image" data-tooltip="Imagen">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <circle cx="9" cy="10" r="1.5" fill="currentColor"/>
+              <path d="m6.5 17 4-4 3 3 2.5-2.5L19.5 17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Imagen</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="audio" data-tooltip="Audio">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 6v9.2a2.8 2.8 0 1 1-1.8-2.62V8.2l7-1.8v7.6a2.8 2.8 0 1 1-1.8-2.62V5Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Audio</span>
+          </button>
+          <button type="button" class="editor-icon-button" data-rich-command="worksheet" data-tooltip="Ficha">
+            <svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="4.5" width="14" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M8.5 9h7M8.5 12h7M8.5 15h4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+            </svg>
+            <span class="sr-only">Ficha</span>
+          </button>
+        </div>
+      </section>
     </div>
 
-    <div class="editor-layout">
-      <section class="editor-canvas stack" data-editor-surface>
+    <div class="editor-status-strip">
+      <span class="chip" data-active-branch-label>Espacio activo: Material compartido</span>
+      <span class="chip" data-save-columns>0 bloques en columnas</span>
+      <span class="chip" data-save-worksheets>0 fichas enlazadas</span>
+      <span class="chip" data-save-assets>0 recursos pendientes</span>
+    </div>
+
+    <section class="editor-mode-panel is-active" data-rich-panel="edit">
+      <div class="editor-media-toolbar card" data-rich-media-toolbar hidden>
+        <div class="editor-media-toolbar-head">
+          <div>
+            <p class="eyebrow">Recurso seleccionado</p>
+            <h3>Ajustar bloque visual</h3>
+          </div>
+          <button type="button" class="button button-tonal" data-rich-remove-selected-media>Quitar bloque</button>
+        </div>
+        <div class="grid three">
+          <label>
+            Texto alternativo
+            <input type="text" data-image-alt placeholder="Describe la imagen" />
+          </label>
+          <label>
+            Posición
+            <select data-image-align>
+              <option value="center">Centrada</option>
+              <option value="left">A la izquierda</option>
+              <option value="right">A la derecha</option>
+            </select>
+          </label>
+          <label>
+            Tamaño
+            <select data-image-size>
+              <option value="100">Ancho completo</option>
+              <option value="66">Dos tercios</option>
+              <option value="50">Mitad</option>
+              <option value="33">Un tercio</option>
+            </select>
+          </label>
+        </div>
+        <p class="muted" data-selected-asset-hint>Selecciona una imagen dentro del documento para ajustar su presentación.</p>
+      </div>
+
+      <div class="editor-inline-assets stack compact" data-inline-assets hidden>
+        <div class="editor-inline-assets-head">
+          <div>
+            <p class="eyebrow">Recursos preparados</p>
+            <h3>Se guardarán con este material</h3>
+          </div>
+          <p class="muted">Todo lo que arrastres o elijas aquí se inserta al momento y se versiona al guardar.</p>
+        </div>
+        <div class="editor-inline-assets-list" data-inline-assets-list></div>
+      </div>
+
+      <section class="editor-canvas editor-canvas-rich stack" data-editor-surface>
         <div class="editor-canvas-head">
           <div>
             <p class="eyebrow">Documento</p>
-            <h3>Redacta sin perder el hilo</h3>
+            <h3>Edición directa</h3>
           </div>
-          <p class="muted">El foco principal queda en el texto. Los medios se ven aquí mismo al soltarlos y la maquetación se ajusta desde el inspector derecho.</p>
+          <p class="muted">Arrastra imágenes o audio sobre la hoja. Usa la cinta superior para estructura, columnas y enlaces.</p>
         </div>
-        <div class="editor-summary-bar">
-          <span class="chip" data-active-branch-label>Rama activa: {{ selected_branch }}</span>
-          <span class="chip">{{ resource_kind_label or "Libro" }}</span>
-          <span class="chip">Preview paginada</span>
-          <span class="chip">Medios con arrastrar y soltar</span>
-        </div>
-        <div class="editor-inline-assets stack compact" data-inline-assets hidden>
-          <div class="editor-inline-assets-head">
-            <div>
-              <p class="eyebrow">Medios en esta edición</p>
-              <h3>Lo que acabas de soltar aparece aquí</h3>
-            </div>
-            <p class="muted">Se guardarán junto al documento y se insertan como bloques reutilizables.</p>
-          </div>
-          <div class="editor-inline-assets-list" data-inline-assets-list></div>
-        </div>
-        <textarea name="content" rows="28" data-editor-input>{{ content }}</textarea>
-        <p class="muted editor-note">
-          Usa <code>{{ pagebreak_marker }}</code> para forzar un cambio de página. También puedes insertar diseños de 2 o 3 columnas y enlaces a fichas desde la biblioteca lateral.
-        </p>
+        <div class="rich-editor-host" data-rich-editor></div>
       </section>
 
-      <aside class="editor-sidebar stack">
-        <div class="editor-inspector-tabs" role="tablist" aria-label="Panel lateral del editor">
-          <button type="button" class="is-active" data-editor-tab-button="preview" aria-selected="true">Vista</button>
-          <button type="button" data-editor-tab-button="media" aria-selected="false">Medios</button>
-          <button type="button" data-editor-tab-button="library" aria-selected="false">Biblioteca</button>
+      <p class="muted editor-note">
+        Si cambias a lectura verás la maquetación final sin salir del editor. Las fichas y recursos reutilizables están en la pestaña <strong>Recursos</strong>.
+      </p>
+    </section>
+
+    <section class="editor-mode-panel" data-rich-panel="preview" hidden>
+      <div class="preview-panel-head">
+        <div>
+          <p class="eyebrow">Lectura</p>
+          <h3>Cómo lo verá el profesorado</h3>
+        </div>
+        <p class="muted">Vista de lectura paginada, sin elementos técnicos de edición.</p>
+      </div>
+      <div class="preview-panel preview-panel-rich" data-rich-preview>
+        {% set document = preview_document %}
+        {% set document_id = "editor-initial-preview" %}
+        {% set compact_preview = true %}
+        {% include "books/_document.html" %}
+      </div>
+    </section>
+
+    <section class="editor-mode-panel" data-rich-panel="library" hidden>
+      <div class="editor-resource-board">
+        <div class="editor-resource-board-head">
+          <div>
+            <p class="eyebrow">Recursos</p>
+            <h3>Biblioteca del material</h3>
+          </div>
+          <p class="muted">Inserta fichas, reutiliza imágenes o añade audio sin salir de la pantalla principal.</p>
         </div>
 
-        <div class="preview-panel editor-inspector-panel" data-editor-panel="preview">
-          <div class="preview-panel-head">
-            <div>
-              <p class="eyebrow">Vista previa</p>
-              <h3>Lectura maquetada</h3>
-            </div>
-            <p class="muted">Revisa jerarquía, paginación y composición sin abandonar el editor.</p>
-          </div>
-          <div data-editor-preview>
-            {% set document = preview_document %}
-            {% set document_id = "editor-initial-preview" %}
-            {% set compact_preview = true %}
-            {% include "books/_document.html" %}
-          </div>
+        <div class="asset-dropzone" data-asset-dropzone tabindex="0">
+          <p><strong>Suelta archivos aquí o en la hoja de edición</strong></p>
+          <p class="muted">También puedes abrir el selector para preparar varios recursos.</p>
+          <button type="button" class="button button-tonal" data-asset-picker>Elegir archivos</button>
         </div>
 
-        <section class="stack compact editor-assets-panel editor-inspector-panel" data-media-studio data-editor-panel="media" hidden>
+        {% if worksheet_entries %}
+        <div class="stack compact">
           <div>
-            <p class="eyebrow">Inserción visual</p>
-            <h3>Imágenes y audio</h3>
-            <p class="muted">Selecciona o suelta un recurso, ajusta bloque, alineación y tamaño, e insértalo donde estés escribiendo.</p>
+            <p class="eyebrow">Fichas</p>
+            <h3>Enlazar ficha de actividad</h3>
           </div>
-          <input type="file" name="assets" accept="image/*,audio/mpeg" multiple hidden data-asset-input />
-          <div class="asset-dropzone" data-asset-dropzone tabindex="0">
-            <p><strong>Suelta archivos aquí o encima del área de texto</strong></p>
-            <p class="muted">También puedes abrir el selector para preparar varios recursos.</p>
-            <button type="button" class="button button-tonal" data-asset-picker>Elegir archivos</button>
+          <div class="grid two">
+            {% for worksheet in worksheet_entries %}
+            <article class="comment stack compact worksheet-card">
+              <div class="comment-head">
+                <strong>{{ worksheet.title }}</strong>
+                <span class="chip">Ficha</span>
+              </div>
+              {% if worksheet.summary %}
+              <p class="muted">{{ worksheet.summary }}</p>
+              {% endif %}
+              <div class="actions">
+                <a class="button button-tonal" href="{{ worksheet.detail_url }}">Abrir ficha</a>
+                <button
+                  type="button"
+                  class="button button-tonal"
+                  data-insert-worksheet
+                  data-worksheet-slug="{{ worksheet.slug }}"
+                  data-worksheet-title="{{ worksheet.title }}"
+                >
+                  Insertar en el documento
+                </button>
+              </div>
+            </article>
+            {% endfor %}
           </div>
+        </div>
+        {% endif %}
 
-          <div class="editor-media-composer stack compact">
-            <div>
-              <p class="eyebrow">Bloque seleccionado</p>
-              <h3>Configurar inserción</h3>
-            </div>
-            <label>
-              Recurso activo
-              <input type="text" readonly data-selected-asset-name placeholder="Selecciona o arrastra un archivo" />
-            </label>
-            <label>
-              Texto alternativo
-              <input type="text" data-image-alt placeholder="Describe la imagen para el lector" />
-            </label>
-            <div class="grid two">
-              <label>
-                Posición
-                <select data-image-align>
-                  <option value="center">Centrada</option>
-                  <option value="left">Flotada a la izquierda</option>
-                  <option value="right">Flotada a la derecha</option>
-                </select>
-              </label>
-              <label>
-                Tamaño
-                <select data-image-size>
-                  <option value="100">Ancho completo</option>
-                  <option value="66">Dos tercios</option>
-                  <option value="50">Mitad</option>
-                  <option value="33">Un tercio</option>
-                </select>
-              </label>
-            </div>
-            <div class="actions">
-              <button type="button" class="button" data-insert-selected-asset>Insertar en el texto</button>
-              <button type="button" class="button button-tonal" data-copy-selected-asset>Copiar snippet</button>
-            </div>
-            <p class="muted" data-selected-asset-hint>Selecciona una imagen de la biblioteca o arrastra un archivo para preparar el bloque.</p>
-          </div>
-
-          <div class="stack compact" data-pending-assets hidden>
-            <div>
-              <p class="eyebrow">Pendientes</p>
-              <h3>Se añadirán en este guardado</h3>
-            </div>
-            <div class="grid two" data-pending-assets-list></div>
-          </div>
-        </section>
-
-        <section class="stack compact editor-library-panel editor-inspector-panel" data-editor-panel="library" hidden>
+        <div class="stack compact">
           <div>
-            <p class="eyebrow">Biblioteca</p>
-            <h3>Recursos disponibles en {{ selected_branch }}</h3>
-            <p class="muted">Todo el material versionado vive aquí. Puedes reutilizarlo sin bajar a otra pantalla.</p>
+            <p class="eyebrow">Material multimedia</p>
+            <h3>Recursos ya disponibles</h3>
           </div>
-          {% if worksheet_entries %}
-          <div class="stack compact">
-            <div>
-              <p class="eyebrow">Fichas</p>
-              <h3>Fichas enlazables desde el documento</h3>
-            </div>
-            <div class="stack compact">
-              {% for worksheet in worksheet_entries %}
-              <article class="comment stack compact worksheet-card">
-                <div class="comment-head">
-                  <strong>{{ worksheet.title }}</strong>
-                  <span class="chip">ficha</span>
-                </div>
-                {% if worksheet.summary %}
-                <p class="muted">{{ worksheet.summary }}</p>
-                {% endif %}
-                <code>{{ worksheet.snippet }}</code>
-                <div class="actions">
-                  <a class="button button-tonal" href="{{ worksheet.detail_url }}">Abrir ficha</a>
-                  <button
-                    type="button"
-                    class="button button-tonal"
-                    data-insert-worksheet
-                    data-worksheet-slug="{{ worksheet.slug }}"
-                    data-worksheet-title="{{ worksheet.title }}"
-                    data-worksheet-snippet="{{ worksheet.snippet }}"
-                  >
-                    Insertar enlace
-                  </button>
-                  <button type="button" class="button button-tonal" data-copy-text="{{ worksheet.snippet }}">Copiar snippet</button>
-                </div>
-              </article>
-              {% endfor %}
-            </div>
-          </div>
-          {% endif %}
           {% if asset_entries %}
-          <div class="stack compact editor-library-list">
+          <div class="grid two">
             {% for asset in asset_entries %}
             <article class="comment stack compact asset-card">
               <div class="comment-head">
@@ -212,76 +323,62 @@
               {% else %}
               <a href="{{ asset.public_url }}" target="_blank" rel="noreferrer">{{ asset.filename }}</a>
               {% endif %}
-              <code>{{ asset.snippet }}</code>
               <div class="actions">
-                <button
-                  type="button"
-                  class="button button-tonal"
-                  data-select-asset
-                  data-asset-filename="{{ asset.filename }}"
-                  data-asset-media-type="{{ asset.media_type }}"
-                  data-asset-snippet="{{ asset.snippet }}"
-                >
-                  Preparar bloque
-                </button>
                 <button
                   type="button"
                   class="button button-tonal"
                   data-insert-asset
                   data-asset-filename="{{ asset.filename }}"
                   data-asset-media-type="{{ asset.media_type }}"
-                  data-asset-snippet="{{ asset.snippet }}"
+                  data-asset-public-url="{{ asset.public_url }}"
                 >
-                  Insertar en el editor
+                  Insertar en el documento
                 </button>
-                <button type="button" class="button button-tonal" data-copy-text="{{ asset.snippet }}">Copiar snippet</button>
               </div>
             </article>
             {% endfor %}
           </div>
           {% else %}
-          <p class="muted">Todavía no hay recursos en esta rama. Sube una imagen o un audio para reutilizarlo en el libro.</p>
+          <p class="muted">Todavía no hay recursos en esta rama. Añade una imagen o audio para reutilizarlo después.</p>
           {% endif %}
-        </section>
-      </aside>
-    </div>
-    <input type="hidden" name="book_id" value="{{ book.id }}" data-editor-book-id />
-    <input type="hidden" name="preview_branch_name" value="{{ selected_branch }}" data-editor-branch />
+        </div>
+      </div>
+    </section>
 
     <dialog class="editor-save-dialog" data-save-dialog>
       <div class="editor-save-sheet stack">
         <div class="section-header">
           <div>
             <p class="eyebrow">Guardar</p>
-            <h3>Preparar commit de {{ resource_kind_label|default("libro")|lower }}</h3>
-            <p class="muted">Revisa la rama, resume el cambio y confirma lo que se va a versionar en este guardado.</p>
+            <h3>Guardar cambios del material</h3>
+            <p class="muted">Confirma dónde se guardan los cambios y añade un resumen corto si quieres dejar contexto al equipo.</p>
           </div>
         </div>
 
         <div class="editor-save-summary grid two">
           <article class="comment stack compact">
             <p class="eyebrow">Destino</p>
-            <strong data-save-branch>{{ selected_branch }}</strong>
+            <strong data-save-branch>Material compartido</strong>
             <span class="muted">{{ document_title or book.title }}</span>
           </article>
           <article class="comment stack compact">
-            <p class="eyebrow">Contenido detectado</p>
+            <p class="eyebrow">Resumen del material</p>
             <div class="chip-group">
               <span class="chip" data-save-columns>0 bloques en columnas</span>
-              <span class="chip" data-save-worksheets>0 enlaces a fichas</span>
-              <span class="chip" data-save-assets>0 assets pendientes</span>
+              <span class="chip" data-save-worksheets>0 fichas enlazadas</span>
+              <span class="chip" data-save-assets>0 recursos pendientes</span>
             </div>
-            <span class="muted" data-save-assets-detail>Sin archivos nuevos en esta edición.</span>
+            <span class="muted" data-save-assets-detail>Sin archivos nuevos en esta sesión.</span>
           </article>
         </div>
 
         <label>
-          Mensaje de commit
+          Resumen del guardado
           <input
             type="text"
             name="commit_message"
             value=""
-            placeholder="Resume el cambio. Si lo dejas vacío se generará automáticamente."
+            placeholder="Opcional. Si lo dejas vacío, se generará automáticamente."
             data-save-commit-input
           />
         </label>
@@ -289,13 +386,13 @@
         <div class="comment stack compact">
           <p class="eyebrow">Se guardará</p>
           <ul class="editor-save-checklist" data-save-checklist>
-            <li>Documento Markdown actualizado.</li>
+            <li>Documento actualizado.</li>
           </ul>
         </div>
 
         <div class="actions">
           <button type="button" class="button button-tonal" data-close-save-dialog>Seguir editando</button>
-          <button type="submit" class="button">Guardar y crear commit</button>
+          <button type="submit" class="button">Guardar cambios</button>
         </div>
       </div>
     </dialog>
