@@ -4,6 +4,7 @@ import sys
 from base64 import b64decode
 from pathlib import Path
 
+import bcrypt
 from fastapi.testclient import TestClient
 
 
@@ -171,7 +172,8 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Guardar cambios del material" in response.text
     assert "Suelta archivos aquí o en la hoja de edición" in response.text
     assert "Se guardarán con este material" in response.text
-    assert "Edición directa" in response.text
+    assert "Version activa" in response.text
+    assert "Edición directa" not in response.text
     assert "Insertar en el documento" in response.text
     assert "2 columnas" in response.text
     assert "Lectura" in response.text
@@ -449,3 +451,196 @@ for version in range(4):
         check=True,
     ).stdout.strip()
     assert current_branch == "main"
+
+
+def test_login_accepts_legacy_bcrypt_hash_and_migrates_it(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        pass
+
+    from app.database import SessionLocal
+    from app.main import create_default_admin
+    from app.models import User
+
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == "admin@test.local").first()
+        assert admin is not None
+        admin.password_hash = bcrypt.hashpw(b"admin12345", bcrypt.gensalt()).decode("utf-8")
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/login",
+        data={"email": "admin@test.local", "password": "admin12345"},
+        follow_redirects=True,
+    )
+    assert login_response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == "admin@test.local").first()
+        assert admin is not None
+        assert admin.password_hash.startswith("$pbkdf2-sha256$")
+    finally:
+        db.close()
+
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == "admin@test.local").first()
+        assert admin is not None
+        admin.password_hash = "legacy-hash-without-scheme"
+        db.commit()
+    finally:
+        db.close()
+
+    create_default_admin()
+
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == "admin@test.local").first()
+        assert admin is not None
+        assert admin.password_hash.startswith("$pbkdf2-sha256$")
+    finally:
+        db.close()
+
+
+def test_book_detail_uses_school_course_and_workspace_selectors(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        pass
+
+    from app.database import SessionLocal
+    from app.models import Organization
+
+    db = SessionLocal()
+    try:
+        db.add(Organization(name="Colegio Selector", slug="colegio-selector", description="Centro de prueba"))
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/login",
+        data={"email": "admin@test.local", "password": "admin12345"},
+        follow_redirects=True,
+    )
+    assert login_response.status_code == 200
+
+    response = client.get("/books/1?school=colegio-selector&course_version=Primaria&workspace=shared")
+    assert response.status_code == 200
+    assert "Colegio" in response.text
+    assert "Curso" in response.text
+    assert "Version" in response.text
+    assert "Version aprobada del cole" in response.text
+    assert "Mi version docente" in response.text
+    assert "Rama origen" not in response.text
+
+
+def test_teacher_can_propose_and_org_admin_can_accept_school_course_version(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        pass
+
+    from app.database import SessionLocal
+    from app.models import MembershipRole, Organization, OrganizationMembership, ReviewRequest, ReviewStatus, User
+    from app.security import hash_password
+    from app.services.permissions import approved_branch_name, user_workspace_branch_name
+
+    db = SessionLocal()
+    try:
+        school = Organization(name="Colegio Flujo", slug="colegio-flujo", description="Centro de prueba")
+        teacher = User(
+            full_name="Ana Profe",
+            email="ana-flujo@test.local",
+            password_hash=hash_password("profe12345"),
+        )
+        org_admin = User(
+            full_name="Marta Directora",
+            email="marta-flujo@test.local",
+            password_hash=hash_password("admincolegio123"),
+        )
+        db.add_all([school, teacher, org_admin])
+        db.commit()
+        db.refresh(school)
+        db.refresh(teacher)
+        db.refresh(org_admin)
+        db.add_all(
+            [
+                OrganizationMembership(user_id=teacher.id, organization_id=school.id, role=MembershipRole.editor),
+                OrganizationMembership(user_id=org_admin.id, organization_id=school.id, role=MembershipRole.organization_admin),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    teacher_login = client.post(
+        "/login",
+        data={"email": "ana-flujo@test.local", "password": "profe12345"},
+        follow_redirects=True,
+    )
+    assert teacher_login.status_code == 200
+
+    teacher_branch = user_workspace_branch_name(type("UserLike", (), {"full_name": "Ana Profe", "email": "ana-flujo@test.local"})(), "colegio-flujo", "Primaria")
+    approved_branch = approved_branch_name("colegio-flujo", "Primaria")
+
+    save_response = client.post(
+        "/books/1/edit",
+        data={
+            "branch_name": teacher_branch,
+            "content": "# Lengua Demo\n\n## Introduccion\n\nTexto adaptado para Colegio Flujo.\n",
+            "commit_message": "Adaptacion Colegio Flujo",
+        },
+        follow_redirects=True,
+    )
+    assert save_response.status_code == 200
+    assert "Texto adaptado para Colegio Flujo" in save_response.text
+
+    pr_response = client.post(
+        "/books/1/pull-requests",
+        data={
+            "head_branch": teacher_branch,
+            "base_branch": approved_branch,
+            "title": "Adaptacion para Colegio Flujo",
+            "body": "Propuesta docente para la version aprobada.",
+        },
+        follow_redirects=True,
+    )
+    assert pr_response.status_code == 200
+    assert "Pull request registrada correctamente." in pr_response.text
+
+    client.get("/logout", follow_redirects=True)
+
+    admin_login = client.post(
+        "/login",
+        data={"email": "marta-flujo@test.local", "password": "admincolegio123"},
+        follow_redirects=True,
+    )
+    assert admin_login.status_code == 200
+
+    approve_response = client.post(
+        "/books/1/approve-version",
+        data={"source_branch": teacher_branch, "target_branch": approved_branch},
+        follow_redirects=True,
+    )
+    assert approve_response.status_code == 200
+    assert "Version aprobada para el colegio y curso seleccionados." in approve_response.text
+
+    branch_content = subprocess.run(
+        ["git", "show", f"{approved_branch}:books/primaria/lengua/lengua-demo/book.md"],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "Texto adaptado para Colegio Flujo." in branch_content
+
+    db = SessionLocal()
+    try:
+        review = db.query(ReviewRequest).filter(ReviewRequest.head_branch == teacher_branch).first()
+        assert review is not None
+        assert review.status == ReviewStatus.merged
+    finally:
+        db.close()

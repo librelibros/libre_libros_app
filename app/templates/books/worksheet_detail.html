@@ -13,19 +13,9 @@
       {% if user and edit_branch %}
       <a class="button" href="/books/{{ book.id }}/worksheets/{{ worksheet_slug }}/edit?branch={{ edit_branch }}">Editar ficha</a>
       {% endif %}
+      <span class="chip">{{ version_context.active_branch_label }}</span>
     </div>
   </div>
-
-  <form method="get" class="inline-form">
-    <label>
-      Rama
-      <select name="branch" onchange="this.form.submit()">
-        {% for branch in available_branches %}
-        <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
-        {% endfor %}
-      </select>
-    </label>
-  </form>
 
   {% include "books/_document.html" %}
 </section>

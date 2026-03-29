@@ -64,3 +64,23 @@ Post-validator UX refinement should create a dedicated execution folder, for exa
 - Optional `server.log` when the refinement changed interactive behavior
 
 This phase consumes the evidence already produced by validator runs, reviews the captured journeys as a UX expert, applies interface improvements, and stores a fresh screenshot set after the changes.
+
+## Auth migration regression
+
+Legacy-password regression coverage for persistent Docker data:
+
+```bash
+cd libre_libros_app
+./.venv-validator/bin/python -m pytest -q
+docker compose up --build -d
+curl -i -c /tmp/libre_libros_admin.cookies -X POST http://127.0.0.1:8000/login \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data 'email=admin@example.com&password=admin12345'
+curl -i -b /tmp/libre_libros_admin.cookies http://127.0.0.1:8000/
+```
+
+Generated evidence:
+
+- `test_plan/2026-03-29-admin-login-fix/run-log.md`
+- Optional container logs proving `POST /login` returns `303`
+- Optional SQLite inspection showing the admin hash migrated to `pbkdf2`

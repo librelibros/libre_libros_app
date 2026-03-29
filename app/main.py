@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import GlobalRole, User
 from app.routers import admin, auth, books, dashboard
-from app.security import hash_password
+from app.security import hash_password, password_needs_rehash, verify_password
 from app.services.bootstrap import sync_example_repository
 from app.templates import templates
 
@@ -24,6 +24,24 @@ def create_default_admin() -> None:
     try:
         existing = db.query(User).filter(User.email == settings.init_admin_email.lower().strip()).first()
         if existing:
+            changed = False
+            if existing.full_name != settings.init_admin_name:
+                existing.full_name = settings.init_admin_name
+                changed = True
+            if existing.global_role != GlobalRole.admin:
+                existing.global_role = GlobalRole.admin
+                changed = True
+            if existing.auth_provider != "local":
+                existing.auth_provider = "local"
+                changed = True
+            if password_needs_rehash(existing.password_hash) or not verify_password(
+                settings.init_admin_password,
+                existing.password_hash,
+            ):
+                existing.password_hash = hash_password(settings.init_admin_password)
+                changed = True
+            if changed:
+                db.commit()
             return
         admin_user = User(
             full_name=settings.init_admin_name,

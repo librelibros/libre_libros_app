@@ -25182,6 +25182,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
   function formatBranchLabel(branchName = "") {
     if (!branchName) return "Sin seleccionar";
     if (branchName === "main") return "Material compartido";
+    const explicitLabel = document.querySelector('[name="branch_name"]')?.dataset?.branchLabel;
+    if (explicitLabel) return explicitLabel;
     if (branchName.startsWith("users/")) {
       const friendlyName = branchName.slice("users/".length).split("-").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
       return `Espacio personal${friendlyName ? ` \xB7 ${friendlyName}` : ""}`;
@@ -25511,14 +25513,14 @@ ${columns.join("\n[[col]]\n")}
   }
   function updateSaveSummary(form) {
     const textarea = form.querySelector("[data-editor-input]");
-    const branchSelect = form.querySelector('select[name="branch_name"]');
+    const branchSelect = form.querySelector('[name="branch_name"]');
     const files = [...form._richState.transfer.files];
     const markdown = textarea?.value || "";
     const columnsCount = (markdown.match(/\[\[columns:[23]\]\]/gi) || []).length;
     const worksheetsCount = (markdown.match(/\[\[worksheet:[^\]]+\]\]/gi) || []).length;
     const branchName = branchSelect?.value || "";
-    const branchLabel = formatBranchLabel(branchName);
-    form.querySelector("[data-active-branch-label]")?.replaceChildren(document.createTextNode(`Espacio activo: ${branchLabel}`));
+    const branchLabel = branchSelect?.dataset.branchLabel || formatBranchLabel(branchName);
+    form.querySelector("[data-active-branch-label]")?.replaceChildren(document.createTextNode(branchLabel));
     const saveBranch = form.querySelector("[data-save-branch]");
     if (saveBranch) saveBranch.textContent = branchLabel;
     form.querySelectorAll("[data-save-columns]").forEach((node) => {
@@ -25716,7 +25718,7 @@ ${columns.join("\n[[col]]\n")}
     form.querySelectorAll("[data-rich-mode-button]").forEach((button) => {
       button.addEventListener("click", () => setMode(form, button.dataset.richModeButton || "edit"));
     });
-    form.querySelector('select[name="branch_name"]')?.addEventListener("change", (event) => {
+    form.querySelector('[name="branch_name"]')?.addEventListener("change", (event) => {
       const branchName = event.target.value || "";
       const hiddenBranch = form.querySelector("[data-editor-branch]");
       if (hiddenBranch) hiddenBranch.value = branchName;

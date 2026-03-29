@@ -10,20 +10,39 @@
     </div>
     <div class="chip-group">
       <span class="chip">{{ book.visibility.value }}</span>
-      <span class="chip">{{ selected_branch }}</span>
+      <span class="chip">{{ version_context.active_branch_label }}</span>
     </div>
   </div>
 
   <form method="get" class="inline-form">
-    <input type="hidden" name="branch" value="{{ selected_branch }}" />
     <label>
-      Rama
-      <select name="branch" onchange="this.form.submit()">
-        {% for branch in available_branches %}
-        <option value="{{ branch }}" {% if branch == selected_branch %}selected{% endif %}>{{ branch }}</option>
+      Colegio
+      <select name="school" onchange="this.form.submit()">
+        <option value="">Material base</option>
+        {% for school in version_context.available_schools %}
+        <option value="{{ school.slug }}" {% if school.slug == version_context.selected_school_slug %}selected{% endif %}>{{ school.name }}</option>
         {% endfor %}
       </select>
     </label>
+    <label>
+      Curso
+      <select name="course_version" onchange="this.form.submit()">
+        {% for course_name in version_context.available_courses %}
+        <option value="{{ course_name }}" {% if course_name == version_context.selected_course %}selected{% endif %}>{{ course_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if user %}
+    <label>
+      Version
+      <select name="workspace" onchange="this.form.submit()">
+        <option value="shared" {% if version_context.selected_workspace == "shared" %}selected{% endif %}>
+          {% if version_context.selected_school_slug %}Version aprobada del cole{% else %}Material base{% endif %}
+        </option>
+        <option value="personal" {% if version_context.selected_workspace == "personal" %}selected{% endif %}>Mi version docente</option>
+      </select>
+    </label>
+    {% endif %}
     {% if user and edit_branch %}
     <a class="button" href="/books/{{ book.id }}/edit?branch={{ edit_branch }}">Editar</a>
     <a class="button button-tonal" href="/books/{{ book.id }}/export/pdf?branch={{ selected_branch }}">Exportar PDF</a>
@@ -34,11 +53,11 @@
 </section>
 
 <section class="card stack">
-  <div class="section-header">
-    <div>
-      <p class="eyebrow">Fichas</p>
-      <h2>Fichas de contenido asociadas</h2>
-    </div>
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Fichas</p>
+        <h2>Fichas de contenido asociadas</h2>
+      </div>
     {% if user and edit_branch %}
     <form method="post" action="/books/{{ book.id }}/worksheets/new" class="inline-form">
       <input type="hidden" name="branch_name" value="{{ edit_branch }}" />
@@ -98,11 +117,12 @@
     </form>
     {% endif %}
     <div class="stack compact">
-      {% for comment in book.comments %}
+      {% for entry in comment_entries %}
+      {% set comment = entry.comment %}
       <div class="comment">
         <div class="comment-head">
           <strong>{{ comment.author.full_name }}</strong>
-          <span class="chip">{{ comment.branch_name }}</span>
+          <span class="chip">{{ entry.branch_label }}</span>
           {% if comment.anchor %}
           <span class="chip">{{ comment.anchor }}</span>
           {% endif %}
@@ -140,18 +160,11 @@
       <button class="button button-tonal" type="submit">Crear issue</button>
     </form>
 
-    {% if available_branches|length > 1 %}
+    {% if can_create_proposal %}
     <form method="post" action="/books/{{ book.id }}/pull-requests" class="stack">
-      <label>
-        Rama origen
-        <select name="head_branch">
-          {% for branch in available_branches %}
-          {% if branch != book.base_branch %}
-          <option value="{{ branch }}">{{ branch }}</option>
-          {% endif %}
-          {% endfor %}
-        </select>
-      </label>
+      <input type="hidden" name="head_branch" value="{{ proposal_head_branch }}" />
+      <input type="hidden" name="base_branch" value="{{ proposal_base_branch }}" />
+      <p class="muted">La propuesta se abrirá desde tu versión docente hacia la versión aprobada visible en este momento.</p>
       <label>
         Título
         <input type="text" name="title" required placeholder="Propuesta de adaptación para el centro" />
@@ -163,16 +176,27 @@
       <button class="button" type="submit">Abrir pull request</button>
     </form>
     {% endif %}
+    {% if user and version_context.can_manage_selected_version and selected_branch != version_context.approved_branch %}
+    <form method="post" action="/books/{{ book.id }}/approve-version" class="stack">
+      <input type="hidden" name="source_branch" value="{{ selected_branch }}" />
+      <input type="hidden" name="target_branch" value="{{ version_context.approved_branch }}" />
+      <p class="muted">Acepta esta versión como edición oficial del colegio y curso seleccionados.</p>
+      <button class="button" type="submit">Aceptar version para el cole</button>
+    </form>
+    {% endif %}
     {% endif %}
 
     <div class="stack compact">
-      {% for review in book.review_requests %}
+      {% for entry in review_entries %}
+      {% set review = entry.review %}
       <div class="comment">
         <div class="comment-head">
           <strong>{{ review.kind.value }}</strong>
           <span class="chip">{{ review.status.value }}</span>
           {% if review.head_branch %}
-          <span class="chip">{{ review.head_branch }} → {{ review.base_branch }}</span>
+          <span class="chip">{{ entry.head_label }} → {{ entry.base_label }}</span>
+          {% else %}
+          <span class="chip">{{ entry.base_label }}</span>
           {% endif %}
         </div>
         <p>{{ review.title }}</p>

@@ -16,13 +16,25 @@ from app.models import Book, BookComment, GlobalRole, Organization, RepositorySo
 from app.services.book_content import worksheet_snippet
 from app.services.books import default_book_paths, export_markdown_to_pdf, sanitize_filename
 from app.services.markdown_utils import PAGEBREAK_MARKER, build_book_document, markdown_preview
-from app.services.permissions import available_branches_for_book, can_edit_book_on_branch, can_view_book
+from app.services.permissions import (
+    approved_branch_name,
+    available_branches_for_book,
+    can_edit_book_on_branch,
+    can_manage_organization_version,
+    can_view_book,
+    course_branch_slug,
+    organization_for_slug,
+    parse_branch_context,
+    user_workspace_branch_name,
+)
 from app.services.repository.factory import repository_client_for
 from app.services.repository.base import RepositoryFileWrite
 from app.templates import templates
 
 router = APIRouter(prefix="/books", tags=["books"])
 settings = get_settings()
+WORKSPACE_SHARED = "shared"
+WORKSPACE_PERSONAL = "personal"
 
 
 def _message_from_request(request: Request) -> str | None:
@@ -197,6 +209,155 @@ def _default_commit_message(book: Book, branch_name: str, uploaded_filenames: li
     return f"Update {book.title} on {branch_name}"
 
 
+def _distinct_course_options(db: Session, book: Book) -> list[str]:
+    course_options = sorted({value for (value,) in db.query(Book.course).distinct().all() if value})
+    if book.course not in course_options:
+        course_options.append(book.course)
+        course_options.sort()
+    return course_options
+
+
+def _school_options(db: Session) -> list[Organization]:
+    return db.query(Organization).order_by(Organization.name).all()
+
+
+def _course_name_from_slug(course_slug: str | None, available_courses: list[str], fallback: str) -> str:
+    if not course_slug:
+        return fallback
+    for course_name in available_courses:
+        if course_branch_slug(course_name) == course_slug:
+            return course_name
+    return fallback
+
+
+def _branch_label_for_ui(branch_name: str, school_name: str | None = None, course_name: str | None = None) -> str:
+    context = parse_branch_context(branch_name)
+    if branch_name == "main":
+        return "Material base compartido"
+    if context.is_personal:
+        if school_name and course_name:
+            return f"Mi version docente · {school_name} · {course_name}"
+        if course_name:
+            return f"Mi version docente · {course_name}"
+        return "Mi version docente"
+    if context.organization_slug:
+        if school_name and course_name:
+            return f"Version aprobada · {school_name} · {course_name}"
+        if school_name:
+            return f"Version aprobada · {school_name}"
+    return branch_name
+
+
+def _review_branch_label(db: Session, branch_name: str, fallback_course: str) -> str:
+    context = parse_branch_context(branch_name)
+    organization = organization_for_slug(db, context.organization_slug) if context.organization_slug else None
+    school_name = organization.name if organization else None
+    available_courses = sorted({value for (value,) in db.query(Book.course).distinct().all() if value})
+    if fallback_course not in available_courses:
+        available_courses.append(fallback_course)
+    course_name = _course_name_from_slug(context.course_slug, available_courses, fallback_course)
+    return _branch_label_for_ui(branch_name, school_name, course_name)
+
+
+def _resolve_version_context(
+    db: Session,
+    user: User | None,
+    book: Book,
+    school_slug: str | None,
+    course_version: str | None,
+    workspace: str | None,
+    branch: str | None,
+) -> dict[str, object]:
+    available_courses = _distinct_course_options(db, book)
+    available_schools = _school_options(db)
+    selected_course = course_version.strip() if course_version else book.course
+    selected_school_slug = (school_slug or "").strip()
+    selected_workspace = workspace if workspace in {WORKSPACE_SHARED, WORKSPACE_PERSONAL} else WORKSPACE_SHARED
+
+    if branch:
+        parsed = parse_branch_context(branch)
+        if parsed.organization_slug:
+            selected_school_slug = parsed.organization_slug
+        if parsed.course_slug:
+            selected_course = _course_name_from_slug(parsed.course_slug, available_courses, selected_course)
+        selected_workspace = WORKSPACE_PERSONAL if parsed.is_personal else WORKSPACE_SHARED
+
+    selected_school = next((org for org in available_schools if org.slug == selected_school_slug), None)
+    selected_school_name = selected_school.name if selected_school else "Material base"
+
+    if branch:
+        selected_branch = branch
+    elif selected_workspace == WORKSPACE_PERSONAL and user:
+        selected_branch = user_workspace_branch_name(user, selected_school_slug or None, selected_course)
+    elif selected_school_slug:
+        selected_branch = approved_branch_name(selected_school_slug, selected_course)
+    else:
+        selected_branch = book.base_branch
+
+    approved_branch = approved_branch_name(selected_school_slug, selected_course) if selected_school_slug else book.base_branch
+    personal_branch = (
+        user_workspace_branch_name(user, selected_school_slug or None, selected_course)
+        if user
+        else None
+    )
+    current_workspace_label = (
+        "Mi version docente" if selected_workspace == WORKSPACE_PERSONAL else ("Version aprobada del cole" if selected_school_slug else "Material base")
+    )
+
+    edit_branch = None
+    if user:
+        if selected_workspace == WORKSPACE_PERSONAL and personal_branch and can_edit_book_on_branch(db, user, book, personal_branch):
+            edit_branch = personal_branch
+        elif selected_school_slug and can_manage_organization_version(db, user, selected_school_slug):
+            edit_branch = approved_branch
+        elif personal_branch and can_edit_book_on_branch(db, user, book, personal_branch):
+            edit_branch = personal_branch
+        elif can_edit_book_on_branch(db, user, book, selected_branch):
+            edit_branch = selected_branch
+
+    return {
+        "available_courses": available_courses,
+        "available_schools": available_schools,
+        "selected_course": selected_course,
+        "selected_school_slug": selected_school_slug,
+        "selected_school_name": selected_school_name,
+        "selected_workspace": selected_workspace,
+        "selected_workspace_label": current_workspace_label,
+        "selected_branch": selected_branch,
+        "approved_branch": approved_branch,
+        "personal_branch": personal_branch,
+        "active_branch_label": _branch_label_for_ui(selected_branch, selected_school_name if selected_school_slug else None, selected_course),
+        "edit_branch": edit_branch,
+        "can_manage_selected_version": bool(user and selected_school_slug and can_manage_organization_version(db, user, selected_school_slug)),
+        "query_params": {
+            "school": selected_school_slug,
+            "course_version": selected_course,
+            "workspace": selected_workspace,
+        },
+    }
+
+
+def _book_file_writes_for_branch(book: Book, repo, source_branch: str) -> list[RepositoryFileWrite]:
+    writes: list[RepositoryFileWrite] = [
+        RepositoryFileWrite(
+            rel_path=book.content_path,
+            content=repo.read_text(book.content_path, source_branch).encode("utf-8"),
+        )
+    ]
+
+    for rel_path in sorted(repo.list_files(book.assets_path, source_branch)):
+        asset_bytes = repo.read_binary(rel_path, source_branch)
+        if asset_bytes:
+            writes.append(RepositoryFileWrite(rel_path=rel_path, content=asset_bytes))
+
+    for rel_path in sorted(repo.list_files(_worksheets_directory(book), source_branch)):
+        worksheet_content = repo.read_text(rel_path, source_branch)
+        if worksheet_content:
+            writes.append(RepositoryFileWrite(rel_path=rel_path, content=worksheet_content.encode("utf-8")))
+
+    return writes
+
+
 @router.get("")
 def list_books(
     request: Request,
@@ -324,6 +485,9 @@ def book_detail(
     book_id: int,
     request: Request,
     branch: str | None = None,
+    school: str | None = None,
+    course_version: str | None = None,
+    workspace: str | None = None,
     db: Session = Depends(get_db),
     user: User | None = Depends(get_current_user),
 ):
@@ -342,17 +506,13 @@ def book_detail(
         raise HTTPException(status_code=404, detail="Book not found")
 
     repo = repository_client_for(book.repository_source)
-    available_branches = [book.base_branch]
-    editable_branches: list[str] = []
-    if user:
-        available_branches.extend(available_branches_for_book(db, user, book))
-        editable_branches = available_branches_for_book(db, user, book)
-    selected_branch = branch or available_branches[0]
+    version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
+    selected_branch = version_context["selected_branch"]
     repo.ensure_branch(selected_branch, book.base_branch)
     content = repo.read_text(book.content_path, selected_branch)
-    edit_branch = None
-    if user and editable_branches:
-        edit_branch = selected_branch if selected_branch in editable_branches else editable_branches[0]
+    edit_branch = version_context["edit_branch"]
+    proposal_head_branch = version_context["personal_branch"] if user else None
+    proposal_base_branch = version_context["approved_branch"] if version_context["selected_school_slug"] else book.base_branch
 
     return templates.TemplateResponse(
         name="books/detail.html",
@@ -361,11 +521,34 @@ def book_detail(
             "user": user,
             "book": book,
             "selected_branch": selected_branch,
-            "available_branches": list(dict.fromkeys(available_branches)),
             "content": content,
             "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
             "worksheet_entries": _worksheet_entries(book, selected_branch),
             "edit_branch": edit_branch,
+            "version_context": version_context,
+            "proposal_head_branch": proposal_head_branch,
+            "proposal_base_branch": proposal_base_branch,
+            "can_create_proposal": bool(
+                user
+                and proposal_head_branch
+                and proposal_head_branch != proposal_base_branch
+                and can_edit_book_on_branch(db, user, book, proposal_head_branch)
+            ),
+            "review_entries": [
+                {
+                    "review": review,
+                    "head_label": _review_branch_label(db, review.head_branch, book.course) if review.head_branch else None,
+                    "base_label": _review_branch_label(db, review.base_branch, book.course),
+                }
+                for review in book.review_requests
+            ],
+            "comment_entries": [
+                {
+                    "comment": comment,
+                    "branch_label": _review_branch_label(db, comment.branch_name, book.course),
+                }
+                for comment in book.comments
+            ],
             "message": _message_from_request(request),
         },
     )
@@ -376,16 +559,19 @@ def edit_book_page(
     book_id: int,
     request: Request,
     branch: str | None = None,
+    school: str | None = None,
+    course_version: str | None = None,
+    workspace: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     book = db.query(Book).options(joinedload(Book.organization), joinedload(Book.repository_source)).filter(Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    branches = available_branches_for_book(db, user, book)
-    if not branches:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable branches available")
-    selected_branch = branch if branch in branches else branches[0]
+    version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
+    selected_branch = version_context["edit_branch"]
+    if not selected_branch:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable versions available")
 
     repo = repository_client_for(book.repository_source)
     repo.ensure_branch(selected_branch, book.base_branch)
@@ -396,7 +582,6 @@ def edit_book_page(
         context={
             "user": user,
             "book": book,
-            "branches": branches,
             "selected_branch": selected_branch,
             "content": content,
             "document_title": book.title,
@@ -408,6 +593,7 @@ def edit_book_page(
             "pagebreak_marker": PAGEBREAK_MARKER,
             "asset_entries": _asset_entries(book, selected_branch),
             "worksheet_entries": _worksheet_entries(book, selected_branch),
+            "version_context": version_context,
             "message": _message_from_request(request),
         },
     )
@@ -493,6 +679,9 @@ def worksheet_detail(
     worksheet_slug: str,
     request: Request,
     branch: str | None = None,
+    school: str | None = None,
+    course_version: str | None = None,
+    workspace: str | None = None,
     db: Session = Depends(get_db),
     user: User | None = Depends(get_current_user),
 ):
@@ -501,18 +690,16 @@ def worksheet_detail(
         raise HTTPException(status_code=404, detail="Book not found")
 
     repo = repository_client_for(book.repository_source)
-    selected_branch = branch or book.base_branch
-    content = repo.read_text(_worksheet_rel_path(book, worksheet_slug), selected_branch)
+    version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
+    selected_branch = version_context["selected_branch"]
+    repo.ensure_branch(selected_branch, book.base_branch)
+    content = repo.read_text(_worksheet_rel_path(book, worksheet_slug), selected_branch) or repo.read_text(
+        _worksheet_rel_path(book, worksheet_slug),
+        book.base_branch,
+    )
     if not content:
         raise HTTPException(status_code=404, detail="Worksheet not found")
-
-    available_branches = [book.base_branch]
-    editable_branches: list[str] = []
-    if user:
-        available_branches.extend(available_branches_for_book(db, user, book))
-        editable_branches = available_branches_for_book(db, user, book)
-
-    edit_branch = selected_branch if selected_branch in editable_branches else (editable_branches[0] if editable_branches else None)
+    edit_branch = version_context["edit_branch"]
     worksheet_title = _extract_document_title(content, worksheet_slug.replace("-", " ").title())
     return templates.TemplateResponse(
         name="books/worksheet_detail.html",
@@ -524,9 +711,9 @@ def worksheet_detail(
             "worksheet_title": worksheet_title,
             "worksheet_summary": _extract_document_summary(content),
             "selected_branch": selected_branch,
-            "available_branches": list(dict.fromkeys(available_branches)),
             "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
             "edit_branch": edit_branch,
+            "version_context": version_context,
             "message": _message_from_request(request),
         },
     )
@@ -538,16 +725,19 @@ def edit_worksheet_page(
     worksheet_slug: str,
     request: Request,
     branch: str | None = None,
+    school: str | None = None,
+    course_version: str | None = None,
+    workspace: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    branches = available_branches_for_book(db, user, book)
-    if not branches:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable branches available")
-    selected_branch = branch if branch in branches else branches[0]
+    version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
+    selected_branch = version_context["edit_branch"]
+    if not selected_branch:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable versions available")
 
     repo = repository_client_for(book.repository_source)
     repo.ensure_branch(selected_branch, book.base_branch)
@@ -562,7 +752,6 @@ def edit_worksheet_page(
         context={
             "user": user,
             "book": book,
-            "branches": branches,
             "selected_branch": selected_branch,
             "content": content,
             "document_title": worksheet_title,
@@ -574,6 +763,7 @@ def edit_worksheet_page(
             "pagebreak_marker": PAGEBREAK_MARKER,
             "asset_entries": _asset_entries(book, selected_branch),
             "worksheet_entries": _worksheet_entries(book, selected_branch),
+            "version_context": version_context,
             "message": _message_from_request(request),
         },
     )
@@ -712,24 +902,27 @@ def create_pull_request(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
     head_branch: str = Form(...),
+    base_branch: str = Form(""),
     title: str = Form(...),
     body: str = Form(""),
 ):
     book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
     if not book or not can_edit_book_on_branch(db, user, book, head_branch):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PR not allowed")
-    if head_branch == book.base_branch:
+    target_branch = base_branch.strip() or book.base_branch
+    if head_branch == target_branch:
         raise HTTPException(status_code=400, detail="Head branch must differ from base branch")
 
     repo = repository_client_for(book.repository_source)
-    pr = repo.create_pull_request(title=title, body=body, head_branch=head_branch, base_branch=book.base_branch)
+    repo.ensure_branch(target_branch, book.base_branch)
+    pr = repo.create_pull_request(title=title, body=body, head_branch=head_branch, base_branch=target_branch)
     record = ReviewRequest(
         book_id=book.id,
         repo_source_id=book.repository_source_id,
         kind=ReviewKind.pull_request,
         title=title,
         body=body,
-        base_branch=book.base_branch,
+        base_branch=target_branch,
         head_branch=head_branch,
         status=ReviewStatus.open,
         external_number=pr.get("number"),
@@ -741,6 +934,54 @@ def create_pull_request(
         f"/books/{book.id}",
         "Pull request registrada correctamente.",
         branch=head_branch,
+    )
+
+
+@router.post("/{book_id}/approve-version")
+def approve_book_version(
+    book_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    source_branch: str = Form(...),
+    target_branch: str = Form(...),
+):
+    book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    target_context = parse_branch_context(target_branch)
+    if not target_context.organization_slug or not can_manage_organization_version(db, user, target_context.organization_slug):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Approval not allowed")
+
+    repo = repository_client_for(book.repository_source)
+    repo.ensure_branch(source_branch, book.base_branch)
+    repo.ensure_branch(target_branch, book.base_branch)
+    writes = _book_file_writes_for_branch(book, repo, source_branch)
+    repo.write_files(
+        branch_name=target_branch,
+        files=writes,
+        commit_message=f"Approve {book.title} for {target_branch}",
+        author_name=user.full_name,
+        author_email=user.email,
+    )
+
+    pending_review = (
+        db.query(ReviewRequest)
+        .filter(
+            ReviewRequest.book_id == book.id,
+            ReviewRequest.head_branch == source_branch,
+            ReviewRequest.base_branch == target_branch,
+            ReviewRequest.status == ReviewStatus.open,
+        )
+        .order_by(ReviewRequest.created_at.desc())
+        .first()
+    )
+    if pending_review:
+        pending_review.status = ReviewStatus.merged
+    db.commit()
+    return _redirect_with_message(
+        f"/books/{book.id}",
+        "Version aprobada para el colegio y curso seleccionados.",
+        branch=target_branch,
     )
 
 

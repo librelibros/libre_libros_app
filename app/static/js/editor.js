@@ -261,18 +261,20 @@ function setEditorTab(form, tabName) {
 }
 
 function syncBranchPreviewState(form) {
-  const branchSelect = form.querySelector('select[name="branch_name"]');
+  const branchSelect = form.querySelector('[name="branch_name"]');
   const branchName = branchSelect?.value || "";
+  const branchLabelText = branchSelect?.dataset.branchLabel || branchName;
   const hiddenBranch = form.querySelector("[data-editor-branch]");
   const branchLabel = form.querySelector("[data-active-branch-label]");
   if (hiddenBranch) hiddenBranch.value = branchName;
-  if (branchLabel) branchLabel.textContent = `Rama activa: ${branchName}`;
+  if (branchLabel) branchLabel.textContent = branchLabelText;
 }
 
 function updateSaveDialogSummary(form) {
   const textarea = form.querySelector("[data-editor-input]");
-  const branchSelect = form.querySelector('select[name="branch_name"]');
+  const branchSelect = form.querySelector('[name="branch_name"]');
   const branchName = branchSelect?.value || form.querySelector("[data-editor-branch]")?.value || "";
+  const branchLabelText = branchSelect?.dataset.branchLabel || branchName;
   const files = [...(form._editorState?.transfer?.files || [])];
   const columnsCount = (textarea?.value.match(/\[\[columns:[23]\]\]/gi) || []).length;
   const worksheetsCount = (textarea?.value.match(/\[\[worksheet:[^\]]+\]\]/gi) || []).length;
@@ -284,7 +286,7 @@ function updateSaveDialogSummary(form) {
   const assetsDetailTarget = form.querySelector("[data-save-assets-detail]");
   const checklist = form.querySelector("[data-save-checklist]");
 
-  if (branchTarget) branchTarget.textContent = branchName;
+  if (branchTarget) branchTarget.textContent = branchLabelText;
   if (columnsTarget) columnsTarget.textContent = `${pluralize(columnsCount, "bloque en columnas", "bloques en columnas")}`;
   if (worksheetsTarget) worksheetsTarget.textContent = `${pluralize(worksheetsCount, "enlace a ficha", "enlaces a fichas")}`;
   if (assetsTarget) assetsTarget.textContent = `${pluralize(files.length, "asset pendiente", "assets pendientes")}`;
@@ -333,7 +335,7 @@ function initializeSaveDialog(form, textarea) {
     }
   });
 
-  form.querySelector('select[name="branch_name"]')?.addEventListener("change", () => {
+  form.querySelector('[name="branch_name"]')?.addEventListener("change", () => {
     syncBranchPreviewState(form);
     updateSaveDialogSummary(form);
     refreshPreview(form);
