@@ -6,6 +6,7 @@
 
 # Python
 .venv/
+.codex/
 .venv-validator/
 __pycache__/
 *.py[cod]
