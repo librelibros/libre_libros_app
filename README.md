@@ -55,6 +55,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 cp .env.example .env
+cp .env_docker.example .env_docker
 docker compose up --build
 ```
 
