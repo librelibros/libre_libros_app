@@ -22,6 +22,7 @@ class MembershipRole(str, Enum):
 class RepositoryProvider(str, Enum):
     local = "local"
     github = "github"
+    gitlab = "gitlab"
 
 
 class Visibility(str, Enum):
@@ -111,6 +112,11 @@ class RepositorySource(TimestampMixin, Base):
     default_branch: Mapped[str] = mapped_column(String(255), default="main")
     organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
     local_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    provider_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    repository_namespace: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    repository_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     github_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
     github_repo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     github_token: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -181,4 +187,3 @@ class ReviewRequest(TimestampMixin, Base):
 
     book: Mapped[Book] = relationship(back_populates="review_requests")
     repository_source: Mapped[RepositorySource] = relationship()
-

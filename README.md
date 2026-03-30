@@ -1,6 +1,6 @@
 # Libre Libros
 
-Libre Libros es un MVP para crear, adaptar y revisar libros de texto colaborativos almacenados en Markdown sobre Git o GitHub.
+Libre Libros es un MVP para crear, adaptar y revisar libros de texto colaborativos almacenados en Markdown sobre proveedores Git.
 
 ## Qué incluye
 
@@ -9,7 +9,7 @@ Libre Libros es un MVP para crear, adaptar y revisar libros de texto colaborativ
 - Catálogo de libros por curso y materia
 - Edición Markdown con vista previa
 - Exportación básica a PDF
-- Soporte para repositorios locales de prueba y repositorios GitHub
+- Soporte para repositorios locales de prueba, GitHub y GitLab
 - Flujo de comentarios, issues y pull requests
 - Dockerfile, `docker-compose.yml` y `.env.example`
 
@@ -18,7 +18,7 @@ Libre Libros es un MVP para crear, adaptar y revisar libros de texto colaborativ
 - `app/main.py`: arranque de FastAPI
 - `app/models.py`: usuarios, organizaciones, repositorios, libros, comentarios y revisiones
 - `app/routers/`: auth, panel, libros y administración
-- `app/services/repository/`: abstracción local Git / GitHub REST
+- `app/services/repository/`: abstracción local Git / GitHub REST / GitLab REST
 - `../data/`: base SQLite y repositorio local montado para desarrollo y Docker
 
 ## Arranque en local
@@ -61,6 +61,8 @@ docker compose up --build
 La app quedará publicada en `http://localhost:8000`.
 Docker usa `.env_docker`, con rutas internas del contenedor (`/app/data`).
 
+En modo debug, `docker compose` levanta también un GitLab local en `http://127.0.0.1:8081`, genera la configuración OAuth mínima y arranca Libre Libros con login delegado a GitLab.
+
 ## Usuario inicial
 
 Si configuras estas variables en `.env`, al arrancar se crea un admin automáticamente:
@@ -97,14 +99,15 @@ Ruta del repo de ejemplo dentro de Docker:
 /app/data/repo
 ```
 
-### Repositorio GitHub
+### Repositorio GitHub o GitLab
 
 Desde `Administración` registra:
 
-- `provider=github`
-- `github_owner`
-- `github_repo`
-- `github_token`
+- `provider=github` o `provider=gitlab`
+- `provider_url`
+- `repository_namespace`
+- `repository_name`
+- `service_token`
 
 El token debe tener permisos para leer/escribir contenidos y crear issues o pull requests.
 
@@ -112,5 +115,5 @@ El token debe tener permisos para leer/escribir contenidos y crear issues o pull
 
 - El exportado PDF es simple y está pensado como punto de partida
 - Los comentarios de detalle viven en la base de datos de la app
-- Para GitHub se usa la API REST con token; no se implementa GitHub App todavía
+- Para GitHub y GitLab se usa la API REST con token; no se implementa todavía una GitHub App ni una GitLab Application de producción
 - El editor Markdown es intencionalmente sencillo

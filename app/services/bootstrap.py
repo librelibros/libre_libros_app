@@ -1,21 +1,15 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from slugify import slugify
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import Book, RepositoryProvider, RepositorySource, Visibility
+from app.services.repository.factory import repository_client_for
 
 
-def _book_summary(markdown_path: Path) -> str | None:
-    try:
-        lines = markdown_path.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return None
-
-    for raw_line in lines:
+def _book_summary(markdown_content: str) -> str | None:
+    for raw_line in markdown_content.splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -25,47 +19,65 @@ def _book_summary(markdown_path: Path) -> str | None:
     return None
 
 
-def sync_example_repository(db: Session) -> None:
-    settings = get_settings()
-    if not settings.example_repo_path:
-        return
-
-    repo_path = Path(settings.example_repo_path)
-    books_root = repo_path / "books"
-    if not books_root.exists():
-        return
-
-    repo_source = (
-        db.query(RepositorySource)
-        .filter(RepositorySource.slug == "repositorio-de-ejemplo")
-        .first()
-    )
+def _upsert_repository_source(
+    db: Session,
+    *,
+    source_slug: str,
+    name: str,
+    provider: RepositoryProvider,
+    default_branch: str,
+    is_public: bool,
+    local_path: str | None = None,
+    provider_url: str | None = None,
+    repository_namespace: str | None = None,
+    repository_name: str | None = None,
+    service_username: str | None = None,
+    service_token: str | None = None,
+) -> RepositorySource:
+    repo_source = db.query(RepositorySource).filter(RepositorySource.slug == source_slug).first()
     if not repo_source:
         repo_source = RepositorySource(
-            name="Repositorio de ejemplo",
-            slug="repositorio-de-ejemplo",
-            provider=RepositoryProvider.local,
-            default_branch="main",
-            local_path=str(repo_path),
-            is_public=True,
+            name=name,
+            slug=source_slug,
+            provider=provider,
+            default_branch=default_branch,
+            is_public=is_public,
         )
         db.add(repo_source)
         db.flush()
-    else:
-        repo_source.local_path = str(repo_path)
-        repo_source.provider = RepositoryProvider.local
-        repo_source.default_branch = "main"
-        repo_source.is_public = True
 
-    discovered_paths: set[str] = set()
-    for markdown_path in books_root.glob("*/*/*/book.md"):
-        rel_path = markdown_path.relative_to(repo_path).as_posix()
-        discovered_paths.add(rel_path)
-        slug = markdown_path.parent.name
-        subject = markdown_path.parent.parent.name.replace("-", " ").title()
-        course = markdown_path.parent.parent.parent.name.title()
+    repo_source.name = name
+    repo_source.provider = provider
+    repo_source.default_branch = default_branch
+    repo_source.is_public = is_public
+    repo_source.local_path = local_path
+    repo_source.provider_url = provider_url
+    repo_source.repository_namespace = repository_namespace
+    repo_source.repository_name = repository_name
+    repo_source.service_username = service_username
+    repo_source.service_token = service_token
+    return repo_source
+
+
+def _sync_catalog_from_source(db: Session, repo_source: RepositorySource) -> None:
+    repo = repository_client_for(repo_source)
+    book_paths = sorted(path for path in repo.list_files("books", repo_source.default_branch) if path.endswith("/book.md"))
+    discovered_paths = set(book_paths)
+
+    for rel_path in book_paths:
+        markdown_content = repo.read_text(rel_path, repo_source.default_branch)
+        if not markdown_content:
+            continue
+
+        parts = rel_path.split("/")
+        if len(parts) < 5:
+            continue
+
+        slug = parts[-2]
+        subject = parts[-3].replace("-", " ").title()
+        course = parts[-4].replace("-", " ").title()
         title = slug.replace("-", " ").title()
-        assets_path = markdown_path.parent.joinpath("assets").relative_to(repo_path).as_posix()
+        assets_path = "/".join(parts[:-1] + ["assets"])
 
         existing_book = (
             db.query(Book)
@@ -75,7 +87,7 @@ def sync_example_repository(db: Session) -> None:
             )
             .first()
         )
-        summary = _book_summary(markdown_path)
+        summary = _book_summary(markdown_content)
 
         if existing_book:
             existing_book.title = title
@@ -84,7 +96,7 @@ def sync_example_repository(db: Session) -> None:
             existing_book.subject = subject
             existing_book.summary = summary
             existing_book.assets_path = assets_path
-            existing_book.base_branch = "main"
+            existing_book.base_branch = repo_source.default_branch
             existing_book.visibility = Visibility.public
             existing_book.owner_user_id = None
             existing_book.organization_id = None
@@ -101,19 +113,88 @@ def sync_example_repository(db: Session) -> None:
                 repository_source_id=repo_source.id,
                 organization_id=None,
                 owner_user_id=None,
-                base_branch="main",
+                base_branch=repo_source.default_branch,
                 content_path=rel_path,
                 assets_path=assets_path,
             )
         )
 
-    stale_books = (
-        db.query(Book)
-        .filter(Book.repository_source_id == repo_source.id)
-        .all()
-    )
+    stale_books = db.query(Book).filter(Book.repository_source_id == repo_source.id).all()
     for book in stale_books:
         if book.content_path not in discovered_paths:
             db.delete(book)
 
+
+def _delete_repository_source(db: Session, repo_source: RepositorySource) -> None:
+    for book in db.query(Book).filter(Book.repository_source_id == repo_source.id).all():
+        db.delete(book)
+    db.flush()
+    db.delete(repo_source)
+
+
+def _cleanup_legacy_bootstrap_sources(
+    db: Session,
+    *,
+    active_slug: str,
+    active_provider: RepositoryProvider,
+) -> None:
+    # When the debug stack switches from the legacy local example repository
+    # to a remote provider bootstrap, keep a single source of truth.
+    if active_provider == RepositoryProvider.local:
+        return
+
+    legacy_sources = (
+        db.query(RepositorySource)
+        .filter(
+            RepositorySource.slug == "repositorio-de-ejemplo",
+            RepositorySource.provider == RepositoryProvider.local,
+        )
+        .all()
+    )
+    for legacy_source in legacy_sources:
+        if legacy_source.slug != active_slug:
+            _delete_repository_source(db, legacy_source)
+
+
+def sync_example_repository(db: Session) -> None:
+    settings = get_settings()
+    repo_source: RepositorySource | None = None
+
+    if settings.bootstrap_repository_provider and settings.bootstrap_repository_name:
+        provider = RepositoryProvider(settings.bootstrap_repository_provider)
+        source_slug = settings.bootstrap_repository_slug or slugify(settings.bootstrap_repository_name)
+        _cleanup_legacy_bootstrap_sources(
+            db,
+            active_slug=source_slug,
+            active_provider=provider,
+        )
+        repo_source = _upsert_repository_source(
+            db,
+            source_slug=source_slug,
+            name=settings.bootstrap_repository_name,
+            provider=provider,
+            default_branch=settings.bootstrap_repository_default_branch,
+            is_public=settings.bootstrap_repository_public,
+            provider_url=settings.bootstrap_repository_url,
+            repository_namespace=settings.bootstrap_repository_namespace,
+            repository_name=settings.bootstrap_repository_name_remote,
+            service_username=settings.bootstrap_repository_username,
+            service_token=settings.bootstrap_repository_token,
+        )
+    elif settings.example_repo_path:
+        repo_source = _upsert_repository_source(
+            db,
+            source_slug="repositorio-de-ejemplo",
+            name="Repositorio de ejemplo",
+            provider=RepositoryProvider.local,
+            default_branch="main",
+            is_public=True,
+            local_path=str(settings.example_repo_path),
+        )
+
+    if not repo_source:
+        db.commit()
+        return
+
+    _sync_catalog_from_source(db, repo_source)
     db.commit()

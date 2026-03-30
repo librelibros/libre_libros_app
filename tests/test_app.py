@@ -6,6 +6,8 @@ from pathlib import Path
 
 import bcrypt
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 TEST_PNG = b64decode(
@@ -87,6 +89,76 @@ def test_bootstrap_imports_example_books(tmp_path: Path):
         assert len(books) == 1
         assert books[0].title == "Lengua Demo"
         assert books[0].visibility.value == "public"
+    finally:
+        db.close()
+
+
+def test_bootstrap_switch_to_gitlab_replaces_legacy_example_source(tmp_path: Path, monkeypatch):
+    class FakeGitLabRepo:
+        def list_files(self, prefix: str, branch: str):
+            return ["books/primaria/lengua/lengua-demo/book.md"]
+
+        def read_text(self, rel_path: str, branch: str):
+            return "# Lengua Demo\n\nContenido remoto.\n"
+
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_PROVIDER", "gitlab")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAME", "Repositorio GitLab Debug")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_SLUG", "repositorio-gitlab-debug")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_URL", "http://gitlab")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAMESPACE", "libreadmin")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAME_REMOTE", "librelibrosrepo")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_USERNAME", "admin@example.com")
+    monkeypatch.setenv("LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_TOKEN", "gitlab-token")
+
+    from app.config import get_settings
+    from app.database import Base
+    from app.models import Book, RepositoryProvider, RepositorySource, Visibility
+    from app.services import bootstrap as bootstrap_service
+
+    get_settings.cache_clear()
+    monkeypatch.setattr(bootstrap_service, "repository_client_for", lambda repo_source: FakeGitLabRepo())
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'bootstrap-switch.db'}", future=True)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    Base.metadata.create_all(engine)
+
+    db = SessionLocal()
+    try:
+        legacy_source = RepositorySource(
+            name="Repositorio de ejemplo",
+            slug="repositorio-de-ejemplo",
+            provider=RepositoryProvider.local,
+            default_branch="main",
+            is_public=True,
+            local_path=str(tmp_path / "legacy-repo"),
+        )
+        db.add(legacy_source)
+        db.flush()
+        db.add(
+            Book(
+                title="Lengua Demo",
+                slug="lengua-demo",
+                course="Primaria",
+                subject="Lengua",
+                summary="Catalogo local heredado.",
+                visibility=Visibility.public,
+                repository_source_id=legacy_source.id,
+                base_branch="main",
+                content_path="books/primaria/lengua/lengua-demo/book.md",
+                assets_path="books/primaria/lengua/lengua-demo/assets",
+            )
+        )
+        db.commit()
+
+        bootstrap_service.sync_example_repository(db)
+        sources = db.query(RepositorySource).all()
+        books = db.query(Book).all()
+
+        assert len(sources) == 1
+        assert sources[0].provider == RepositoryProvider.gitlab
+        assert sources[0].slug == "repositorio-gitlab-debug"
+        assert len(books) == 1
+        assert books[0].repository_source_id == sources[0].id
     finally:
         db.close()
 
@@ -453,6 +525,28 @@ for version in range(4):
     assert current_branch == "main"
 
 
+def test_repository_factory_supports_gitlab_provider():
+    from app.models import RepositoryProvider, RepositorySource
+    from app.services.repository.factory import repository_client_for
+    from app.services.repository.gitlab_api import GitLabRepositoryClient
+
+    source = RepositorySource(
+        name="GitLab Demo",
+        slug="gitlab-demo",
+        provider=RepositoryProvider.gitlab,
+        default_branch="main",
+        provider_url="http://gitlab.local",
+        repository_namespace="admin",
+        repository_name="libre-libros-content",
+        service_token="token-demo",
+    )
+
+    client = repository_client_for(source)
+    assert isinstance(client, GitLabRepositoryClient)
+    assert client.base_url == "http://gitlab.local"
+    assert client.project_ref == "admin%2Flibre-libros-content"
+
+
 def test_login_accepts_legacy_bcrypt_hash_and_migrates_it(tmp_path: Path):
     client = build_client(tmp_path)
     with client:
@@ -598,6 +692,57 @@ def test_teacher_can_propose_and_org_admin_can_accept_school_course_version(tmp_
     assert save_response.status_code == 200
     assert "Texto adaptado para Colegio Flujo" in save_response.text
 
+    subprocess.run(
+        ["git", "checkout", "-b", approved_branch],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    obsolete_asset = tmp_path / "repo" / "books" / "primaria" / "lengua" / "lengua-demo" / "assets" / "obsolete-note.txt"
+    obsolete_asset.parent.mkdir(parents=True, exist_ok=True)
+    obsolete_asset.write_text("obsolete", encoding="utf-8")
+    obsolete_worksheet = (
+        tmp_path / "repo" / "books" / "primaria" / "lengua" / "lengua-demo" / "worksheets" / "obsolete-sheet.md"
+    )
+    obsolete_worksheet.parent.mkdir(parents=True, exist_ok=True)
+    obsolete_worksheet.write_text("# Obsoleta\n\nEliminar\n", encoding="utf-8")
+    subprocess.run(
+        [
+            "git",
+            "add",
+            "books/primaria/lengua/lengua-demo/assets/obsolete-note.txt",
+            "books/primaria/lengua/lengua-demo/worksheets/obsolete-sheet.md",
+        ],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Marta Directora",
+            "-c",
+            "user.email=marta-flujo@test.local",
+            "commit",
+            "-m",
+            "Add obsolete files to approved version",
+        ],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "checkout", "main"],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
     pr_response = client.post(
         "/books/1/pull-requests",
         data={
@@ -636,6 +781,24 @@ def test_teacher_can_propose_and_org_admin_can_accept_school_course_version(tmp_
         check=True,
     ).stdout
     assert "Texto adaptado para Colegio Flujo." in branch_content
+
+    missing_cover = subprocess.run(
+        ["git", "show", f"{approved_branch}:books/primaria/lengua/lengua-demo/assets/obsolete-note.txt"],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert missing_cover.returncode != 0
+
+    missing_worksheet = subprocess.run(
+        ["git", "show", f"{approved_branch}:books/primaria/lengua/lengua-demo/worksheets/obsolete-sheet.md"],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert missing_worksheet.returncode != 0
 
     db = SessionLocal()
     try:

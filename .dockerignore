@@ -1,0 +1,6 @@
+.git
+.pytest_cache
+.venv-validator
+data
+node_modules
+test_plan

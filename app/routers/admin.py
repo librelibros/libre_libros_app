@@ -59,6 +59,7 @@ def admin_panel(
             "membership_roles": list(MembershipRole),
             "repository_providers": list(RepositoryProvider),
             "example_repo_path": str(settings.example_repo_path) if settings.example_repo_path else "",
+            "external_auth_only": settings.external_auth_only,
         },
     )
 
@@ -72,6 +73,8 @@ def create_user(
     password: str = Form(...),
     global_role: GlobalRole = Form(GlobalRole.editor),
 ):
+    if settings.external_auth_only:
+        raise HTTPException(status_code=400, detail="External authentication is enabled")
     from app.security import hash_password
 
     user = User(
@@ -141,9 +144,11 @@ def create_repository_source(
     default_branch: str = Form("main"),
     organization_id: int | None = Form(None),
     local_path: str = Form(""),
-    github_owner: str = Form(""),
-    github_repo: str = Form(""),
-    github_token: str = Form(""),
+    provider_url: str = Form(""),
+    repository_namespace: str = Form(""),
+    repository_name: str = Form(""),
+    service_username: str = Form(""),
+    service_token: str = Form(""),
     is_public: bool = Form(False),
 ):
     source = RepositorySource(
@@ -153,9 +158,14 @@ def create_repository_source(
         default_branch=default_branch.strip() or "main",
         organization_id=organization_id,
         local_path=local_path.strip() or None,
-        github_owner=github_owner.strip() or None,
-        github_repo=github_repo.strip() or None,
-        github_token=github_token.strip() or None,
+        provider_url=provider_url.strip() or None,
+        repository_namespace=repository_namespace.strip() or None,
+        repository_name=repository_name.strip() or None,
+        service_username=service_username.strip() or None,
+        service_token=service_token.strip() or None,
+        github_owner=repository_namespace.strip() or None,
+        github_repo=repository_name.strip() or None,
+        github_token=service_token.strip() or None,
         is_public=is_public,
     )
     db.add(source)

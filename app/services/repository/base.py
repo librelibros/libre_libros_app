@@ -67,6 +67,17 @@ class RepositoryClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def delete_files(
+        self,
+        branch_name: str,
+        rel_paths: list[str],
+        commit_message: str,
+        author_name: str,
+        author_email: str,
+    ) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
     def create_pull_request(self, title: str, body: str, head_branch: str, base_branch: str) -> dict:
         raise NotImplementedError
 

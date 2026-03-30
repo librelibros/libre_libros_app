@@ -210,6 +210,59 @@ class LocalGitRepositoryClient(RepositoryClient):
             author_email,
         )
 
+    def delete_files(
+        self,
+        branch_name: str,
+        rel_paths: list[str],
+        commit_message: str,
+        author_name: str,
+        author_email: str,
+    ) -> str:
+        unique_paths = [path for path in dict.fromkeys(rel_paths) if path]
+        if not unique_paths:
+            return self._run("rev-parse", branch_name)
+        with self._locked():
+            self.ensure_branch(branch_name, self.default_branch)
+            self._checkout(branch_name)
+            try:
+                existing_paths: list[str] = []
+                for rel_path in unique_paths:
+                    target = self.repo_path / rel_path
+                    if target.exists():
+                        if target.is_dir():
+                            for item in sorted(target.rglob("*"), reverse=True):
+                                if item.is_file():
+                                    item.unlink()
+                            for item in sorted(target.rglob("*"), reverse=True):
+                                if item.is_dir():
+                                    item.rmdir()
+                            target.rmdir()
+                        else:
+                            target.unlink()
+                    existing_paths.append(rel_path)
+                self._run("add", "-A", *existing_paths)
+                commit = subprocess.run(
+                    [
+                        "git",
+                        "-c",
+                        f"user.name={author_name}",
+                        "-c",
+                        f"user.email={author_email}",
+                        "commit",
+                        "-m",
+                        commit_message,
+                    ],
+                    cwd=self.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if commit.returncode not in {0, 1}:
+                    raise RuntimeError(commit.stderr.strip() or commit.stdout.strip())
+                return self._run("rev-parse", "HEAD")
+            finally:
+                self._checkout(self.default_branch)
+
     def create_pull_request(self, title: str, body: str, head_branch: str, base_branch: str) -> dict:
         return {
             "number": None,

@@ -2,6 +2,7 @@
 {% set title = "Administración" %}
 {% block content %}
 <section class="grid three admin-grid">
+  {% if not external_auth_only %}
   <article class="card stack">
     <div class="section-header">
       <div>
@@ -44,6 +45,28 @@
       {% endfor %}
     </div>
   </article>
+  {% else %}
+  <article class="card stack">
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Usuarios</p>
+        <h2>Sin gestión local</h2>
+      </div>
+    </div>
+    <p class="muted">La autenticación está delegada en el proveedor Git configurado. Los usuarios aparecen aquí después de iniciar sesión.</p>
+    <div class="stack compact">
+      {% for item in users %}
+      <div class="comment">
+        <div class="comment-head">
+          <strong>{{ item.full_name }}</strong>
+          <span class="chip">{{ item.global_role.value }}</span>
+        </div>
+        <p>{{ item.email }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </article>
+  {% endif %}
 
   <article class="card stack">
     <div class="section-header">
@@ -107,7 +130,7 @@
     <div class="section-header">
       <div>
         <p class="eyebrow">Repositorios</p>
-        <h2>Git local o GitHub</h2>
+        <h2>Proveedores Git</h2>
       </div>
     </div>
     <form method="post" action="/admin/repositories" class="stack">
@@ -149,16 +172,24 @@
       <p class="muted">Ruta sugerida para pruebas: {{ example_repo_path }}</p>
       {% endif %}
       <label>
-        GitHub owner
-        <input type="text" name="github_owner" />
+        URL del proveedor
+        <input type="text" name="provider_url" placeholder="https://gitlab.local o https://api.github.com" />
       </label>
       <label>
-        GitHub repo
-        <input type="text" name="github_repo" />
+        Namespace / owner
+        <input type="text" name="repository_namespace" />
       </label>
       <label>
-        GitHub token
-        <input type="password" name="github_token" />
+        Repositorio
+        <input type="text" name="repository_name" />
+      </label>
+      <label>
+        Usuario técnico
+        <input type="text" name="service_username" />
+      </label>
+      <label>
+        Token / credencial
+        <input type="password" name="service_token" />
       </label>
       <label class="checkbox">
         <input type="checkbox" name="is_public" value="true" />
@@ -173,7 +204,7 @@
           <strong>{{ item.name }}</strong>
           <span class="chip">{{ item.provider.value }}</span>
         </div>
-        <p>{{ item.local_path or (item.github_owner ~ "/" ~ item.github_repo if item.github_owner else "Sin ubicación") }}</p>
+        <p>{{ item.local_path or (item.provider_url ~ " · " ~ item.repository_namespace ~ "/" ~ item.repository_name if item.repository_namespace else "Sin ubicación") }}</p>
       </div>
       {% endfor %}
     </div>

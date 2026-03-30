@@ -1,9 +1,61 @@
 services:
+  gitlab:
+    image: gitlab/gitlab-ce:17.10.0-ce.0
+    container_name: libre-libros-gitlab
+    hostname: gitlab
+    shm_size: "256m"
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://127.0.0.1:8081'
+        gitlab_rails['initial_root_password'] = 'GitLabRoot!2026Debug'
+        nginx['listen_port'] = 80
+        puma['worker_processes'] = 0
+        sidekiq['max_concurrency'] = 10
+    ports:
+      - "8081:80"
+      - "2224:22"
+    volumes:
+      - ../data:/workspace/data
+      - ../data/gitlab/config:/etc/gitlab
+      - ../data/gitlab/logs:/var/log/gitlab
+      - ../data/gitlab/data:/var/opt/gitlab
+
+  gitlab-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.gitlab-bootstrap
+    container_name: libre-libros-gitlab-bootstrap
+    depends_on:
+      - gitlab
+    environment:
+      GITLAB_CONTAINER_NAME: libre-libros-gitlab
+      GITLAB_INTERNAL_URL: http://gitlab
+      GITLAB_PUBLIC_URL: http://127.0.0.1:8081
+      GITLAB_RUNTIME_ENV_PATH: /workspace/data/debug/gitlab-runtime.env
+      GITLAB_DEBUG_ADMIN_EMAIL: admin@example.com
+      GITLAB_DEBUG_ADMIN_PASSWORD: admin12345
+      GITLAB_DEBUG_ADMIN_TOKEN: libre-libros-debug-token
+      GITLAB_DEBUG_PROJECT_PATH: librelibrosrepo
+      GITLAB_DEBUG_PROJECT_NAME: Libre Libros Content
+      GITLAB_DEBUG_OAUTH_APP_NAME: Libre Libros Debug
+      GITLAB_DEBUG_OAUTH_CLIENT_SECRET: libre-libros-oauth-debug-secret
+      GITLAB_DEBUG_OAUTH_REDIRECT_URI: |
+        http://localhost:8000/auth/gitlab/callback
+        http://127.0.0.1:8000/auth/gitlab/callback
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../data:/workspace/data
+
   libre-libros:
     build: .
+    container_name: libre-libros
+    depends_on:
+      gitlab-bootstrap:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     env_file:
       - .env_docker
     volumes:
       - ../data:/app/data
+    command: ["/bin/sh", "/app/scripts/start-with-runtime-config.sh"]

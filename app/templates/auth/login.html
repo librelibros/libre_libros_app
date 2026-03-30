@@ -16,6 +16,7 @@
       {% if error %}
       <div class="alert alert-error">{{ error }}</div>
       {% endif %}
+      {% if not external_auth_only %}
       <form method="post" action="/login" class="stack">
         <label>
           Correo
@@ -27,7 +28,13 @@
         </label>
         <button type="submit" class="button">Entrar</button>
       </form>
+      {% else %}
+      <p class="muted">El acceso local está desactivado. Usa el proveedor Git configurado para entrar.</p>
+      {% endif %}
       <div class="stack compact">
+        {% if gitlab_enabled %}
+        <a class="button" href="/auth/gitlab/start">Entrar con {{ gitlab_name }}</a>
+        {% endif %}
         {% if google_enabled %}
         <a class="button button-tonal" href="/auth/google/start">Entrar con Google</a>
         {% endif %}
@@ -35,8 +42,9 @@
         <a class="button button-tonal" href="/auth/oidc/start">Entrar con SSO</a>
         {% endif %}
       </div>
+      {% if not external_auth_only %}
       <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario</a></p>
+      {% endif %}
     </section>
   </body>
 </html>
-

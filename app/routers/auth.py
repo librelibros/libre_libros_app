@@ -37,6 +37,18 @@ def _init_oauth() -> None:
             client_secret=settings.generic_oidc_client_secret,
             client_kwargs={"scope": "openid email profile"},
         )
+    if settings.gitlab_enabled and settings.gitlab_url and settings.gitlab_client_id and settings.gitlab_client_secret:
+        gitlab_public_url = settings.gitlab_url.rstrip("/")
+        gitlab_internal_url = (settings.gitlab_internal_url or settings.gitlab_url).rstrip("/")
+        oauth.register(
+            name="gitlab",
+            client_id=settings.gitlab_client_id,
+            client_secret=settings.gitlab_client_secret,
+            authorize_url=f"{gitlab_public_url}/oauth/authorize",
+            access_token_url=f"{gitlab_internal_url}/oauth/token",
+            api_base_url=f"{gitlab_internal_url}/api/v4/",
+            client_kwargs={"scope": "read_user api"},
+        )
 
 
 _init_oauth()
@@ -52,6 +64,9 @@ def login_page(request: Request, user=Depends(get_current_user)):
         context={
             "oidc_enabled": "oidc" in oauth._registry,
             "google_enabled": "google" in oauth._registry,
+            "gitlab_enabled": "gitlab" in oauth._registry,
+            "external_auth_only": settings.external_auth_only,
+            "gitlab_name": settings.gitlab_name,
         },
     )
 
@@ -63,6 +78,8 @@ def login(
     email: str = Form(...),
     password: str = Form(...),
 ):
+    if settings.external_auth_only:
+        return RedirectResponse("/login", status_code=303)
     user = db.query(User).filter(User.email == email.lower().strip()).first()
     if not user or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
@@ -72,6 +89,9 @@ def login(
                 "error": "Credenciales no válidas.",
                 "oidc_enabled": "oidc" in oauth._registry,
                 "google_enabled": "google" in oauth._registry,
+                "gitlab_enabled": "gitlab" in oauth._registry,
+                "external_auth_only": settings.external_auth_only,
+                "gitlab_name": settings.gitlab_name,
             },
             status_code=400,
         )
@@ -84,6 +104,8 @@ def login(
 
 @router.get("/register")
 def register_page(request: Request):
+    if settings.external_auth_only:
+        return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(name="auth/register.html", request=request, context={})
 
 
@@ -95,6 +117,8 @@ def register(
     email: str = Form(...),
     password: str = Form(...),
 ):
+    if settings.external_auth_only:
+        return RedirectResponse("/login", status_code=303)
     normalized_email = email.lower().strip()
     existing = db.query(User).filter(User.email == normalized_email).first()
     if existing:
@@ -137,11 +161,14 @@ def _upsert_oidc_user(db: Session, email: str, name: str, provider: str) -> User
             email=normalized_email,
             full_name=name or normalized_email.split("@")[0],
             auth_provider=provider,
-            global_role=GlobalRole.editor,
+            global_role=GlobalRole.admin if settings.init_admin_email and normalized_email == settings.init_admin_email.lower().strip() else GlobalRole.editor,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+    elif settings.init_admin_email and normalized_email == settings.init_admin_email.lower().strip() and user.global_role != GlobalRole.admin:
+        user.global_role = GlobalRole.admin
+        db.commit()
     return user
 
 
@@ -175,5 +202,26 @@ async def oidc_callback(request: Request, db: Session = Depends(get_db)):
     token = await oauth.oidc.authorize_access_token(request)
     user_info = token.get("userinfo") or await oauth.oidc.parse_id_token(request, token)
     user = _upsert_oidc_user(db, user_info["email"], user_info.get("name", ""), "oidc")
+    request.session["user_id"] = user.id
+    return RedirectResponse("/", status_code=303)
+
+
+@router.get("/auth/gitlab/start")
+async def gitlab_start(request: Request):
+    if "gitlab" not in oauth._registry:
+        return RedirectResponse("/login", status_code=303)
+    redirect_uri = request.url_for("gitlab_callback")
+    return await oauth.gitlab.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/auth/gitlab/callback", name="gitlab_callback")
+async def gitlab_callback(request: Request, db: Session = Depends(get_db)):
+    token = await oauth.gitlab.authorize_access_token(request)
+    response = await oauth.gitlab.get("user", token=token)
+    user_info = response.json()
+    email = user_info.get("email") or user_info.get("public_email")
+    if not email:
+        return RedirectResponse("/login", status_code=303)
+    user = _upsert_oidc_user(db, email, user_info.get("name", user_info.get("username", "")), "gitlab")
     request.session["user_id"] = user.id
     return RedirectResponse("/", status_code=303)

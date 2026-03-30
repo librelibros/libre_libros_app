@@ -12,13 +12,14 @@ from app.models import GlobalRole, User
 from app.routers import admin, auth, books, dashboard
 from app.security import hash_password, password_needs_rehash, verify_password
 from app.services.bootstrap import sync_example_repository
+from app.services.runtime_migrations import ensure_runtime_schema
 from app.templates import templates
 
 settings = get_settings()
 
 
 def create_default_admin() -> None:
-    if not settings.init_admin_email or not settings.init_admin_password:
+    if not settings.init_admin_email:
         return
     db: Session = SessionLocal()
     try:
@@ -31,14 +32,19 @@ def create_default_admin() -> None:
             if existing.global_role != GlobalRole.admin:
                 existing.global_role = GlobalRole.admin
                 changed = True
-            if existing.auth_provider != "local":
-                existing.auth_provider = "local"
+            desired_provider = "gitlab" if settings.external_auth_only and settings.gitlab_enabled else "local"
+            if existing.auth_provider != desired_provider:
+                existing.auth_provider = desired_provider
                 changed = True
-            if password_needs_rehash(existing.password_hash) or not verify_password(
-                settings.init_admin_password,
-                existing.password_hash,
-            ):
-                existing.password_hash = hash_password(settings.init_admin_password)
+            if not settings.external_auth_only and settings.init_admin_password:
+                if password_needs_rehash(existing.password_hash) or not verify_password(
+                    settings.init_admin_password,
+                    existing.password_hash,
+                ):
+                    existing.password_hash = hash_password(settings.init_admin_password)
+                    changed = True
+            elif settings.external_auth_only and existing.password_hash is not None:
+                existing.password_hash = None
                 changed = True
             if changed:
                 db.commit()
@@ -46,9 +52,9 @@ def create_default_admin() -> None:
         admin_user = User(
             full_name=settings.init_admin_name,
             email=settings.init_admin_email.lower().strip(),
-            password_hash=hash_password(settings.init_admin_password),
+            password_hash=hash_password(settings.init_admin_password) if settings.init_admin_password and not settings.external_auth_only else None,
             global_role=GlobalRole.admin,
-            auth_provider="local",
+            auth_provider="gitlab" if settings.external_auth_only and settings.gitlab_enabled else "local",
         )
         db.add(admin_user)
         db.commit()
@@ -69,6 +75,7 @@ async def lifespan(_: FastAPI):
     Path("data").mkdir(exist_ok=True)
     settings.repos_root.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
+    ensure_runtime_schema()
     create_default_admin()
     sync_bootstrap_content()
     yield

@@ -8,12 +8,16 @@ from app.services.repository.base import RepositoryClient, RepositoryFileWrite
 
 
 class GitHubRepositoryClient(RepositoryClient):
-    def __init__(self, owner: str, repo: str, token: str, default_branch: str = "main"):
+    def __init__(self, owner: str, repo: str, token: str, default_branch: str = "main", api_url: str | None = None):
         self.owner = owner
         self.repo = repo
         self.token = token
         self.default_branch = default_branch
-        self.base_url = f"https://api.github.com/repos/{owner}/{repo}"
+        api_root = (api_url or "https://api.github.com").rstrip("/")
+        if api_root.endswith("/api/v3"):
+            self.base_url = f"{api_root}/repos/{owner}/{repo}"
+        else:
+            self.base_url = f"{api_root}/repos/{owner}/{repo}"
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -170,6 +174,43 @@ class GitHubRepositoryClient(RepositoryClient):
             author_name,
             author_email,
         )
+
+    def delete_files(
+        self,
+        branch_name: str,
+        rel_paths: list[str],
+        commit_message: str,
+        author_name: str,
+        author_email: str,
+    ) -> str:
+        unique_paths = [path for path in dict.fromkeys(rel_paths) if path]
+        if not unique_paths:
+            return self._get_ref_sha(branch_name)
+        self.ensure_branch(branch_name, self.default_branch)
+        base_commit_sha = self._get_ref_sha(branch_name)
+        base_commit = self._request("GET", f"/git/commits/{base_commit_sha}")
+        tree = [{"path": rel_path, "mode": "100644", "type": "blob", "sha": None} for rel_path in unique_paths]
+        new_tree = self._request(
+            "POST",
+            "/git/trees",
+            json={"base_tree": base_commit["tree"]["sha"], "tree": tree},
+        )
+        commit = self._request(
+            "POST",
+            "/git/commits",
+            json={
+                "message": commit_message,
+                "tree": new_tree["sha"],
+                "parents": [base_commit_sha],
+                "author": {"name": author_name, "email": author_email},
+            },
+        )
+        self._request(
+            "PATCH",
+            f"/git/refs/heads/{branch_name}",
+            json={"sha": commit["sha"], "force": False},
+        )
+        return commit["sha"]
 
     def create_pull_request(self, title: str, body: str, head_branch: str, base_branch: str) -> dict:
         return self._request(

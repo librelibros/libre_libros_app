@@ -358,6 +358,13 @@ def _book_file_writes_for_branch(book: Book, repo, source_branch: str) -> list[R
     return writes
 
 
+def _book_related_paths(book: Book, repo, branch_name: str) -> set[str]:
+    paths = {book.content_path}
+    paths.update(repo.list_files(book.assets_path, branch_name))
+    paths.update(repo.list_files(_worksheets_directory(book), branch_name))
+    return {path for path in paths if path}
+
+
 @router.get("")
 def list_books(
     request: Request,
@@ -955,6 +962,17 @@ def approve_book_version(
     repo = repository_client_for(book.repository_source)
     repo.ensure_branch(source_branch, book.base_branch)
     repo.ensure_branch(target_branch, book.base_branch)
+    target_paths = _book_related_paths(book, repo, target_branch)
+    source_paths = _book_related_paths(book, repo, source_branch)
+    paths_to_delete = sorted(target_paths - source_paths)
+    if paths_to_delete:
+        repo.delete_files(
+            branch_name=target_branch,
+            rel_paths=paths_to_delete,
+            commit_message=f"Remove deleted files from {book.title} for {target_branch}",
+            author_name=user.full_name,
+            author_email=user.email,
+        )
     writes = _book_file_writes_for_branch(book, repo, source_branch)
     repo.write_files(
         branch_name=target_branch,

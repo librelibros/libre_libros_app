@@ -84,3 +84,21 @@ Generated evidence:
 - `test_plan/2026-03-29-admin-login-fix/run-log.md`
 - Optional container logs proving `POST /login` returns `303`
 - Optional SQLite inspection showing the admin hash migrated to `pbkdf2`
+
+## GitLab debug stack
+
+End-to-end validation of the debug compose running Libre Libros against the embedded GitLab server:
+
+```bash
+cd libre_libros_app
+docker compose up --build -d
+./.venv-validator/bin/python scripts/gitlab_debug_playwright_smoke.py
+```
+
+Generated evidence:
+
+- `test_plan/<fecha>-gitlab-debug/run-log.md`
+- `test_plan/<fecha>-gitlab-debug/validation-report.md`
+- `01-login.png`, `02-gitlab-login.png`, `03-dashboard.png`, `04-books.png`, `05-logout.png`
+
+This flow validates that local auth is disabled, the GitLab OAuth login completes, the bootstrapped catalog is visible without duplicated sources, and logout returns to the external-login screen.
