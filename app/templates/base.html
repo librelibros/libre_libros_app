@@ -6,9 +6,11 @@
     <title>{{ app_name }}{% if title %} · {{ title }}{% endif %}</title>
     <link rel="stylesheet" href="/static/css/app.css" />
     <script defer src="/static/js/editor.js"></script>
+    <script defer src="/static/js/welcome-card.js"></script>
     {% block head_scripts %}{% endblock %}
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Saltar al contenido</a>
     <div class="shell">
       <aside class="sidebar">
         <a class="brand" href="/" aria-label="Inicio">
@@ -28,7 +30,7 @@
         </nav>
         {% endif %}
       </aside>
-      <main class="content">
+      <main class="content" id="main-content">
         {% if user %}
         <header class="topbar">
           <div>

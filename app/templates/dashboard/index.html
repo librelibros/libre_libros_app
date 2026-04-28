@@ -16,19 +16,52 @@
   </article>
 </section>
 
-<section class="card stack">
-  <div class="section-header">
-    <div>
-      <p class="eyebrow">Contacto</p>
-      <h2>Email me</h2>
-    </div>
-  </div>
-  <p class="muted">
-    Si quieres nuevas características, mejoras en el flujo editorial o detectar un problema, escríbeme a
-    <a href="mailto:libre_libros@proton.me">libre_libros@proton.me</a>
-    o abre un issue en
-    <a href="https://github.com/librelibros/libre_libros_app/issues" target="_blank" rel="noreferrer">GitHub</a>.
+<section id="welcome-card" class="card stack welcome-card" aria-labelledby="welcome-card-title" hidden>
+  <button type="button" class="welcome-close" aria-label="Ocultar la guía de bienvenida" data-dismiss="welcome-card">×</button>
+  <p class="eyebrow">Guía rápida para profesoras y profesores</p>
+  <h2 id="welcome-card-title">Bienvenida a Libre Libros</h2>
+  <p>
+    Esta es una <strong>biblioteca colaborativa de libros de texto</strong>. Cada libro
+    se escribe con texto sencillo y se guarda en internet, así que puedes consultarlo
+    o editarlo desde cualquier ordenador, y compañeras y compañeros pueden proponer
+    mejoras sobre tu trabajo.
   </p>
+  <ol class="welcome-steps">
+    <li>
+      <strong>Mira el catálogo de abajo.</strong> Verás los libros agrupados por
+      <em>curso</em> (Infantil, Primaria, Secundaria) y <em>materia</em>. Pulsa
+      cualquier libro para abrirlo y leerlo.
+    </li>
+    <li>
+      <strong>Para cambiar algo</strong>, abre el libro y pulsa <em>Editar</em>. Lo
+      que escribas se guarda como una <em>propuesta</em>; otro docente la revisará
+      antes de que se publique. Tu trabajo nunca se pierde.
+    </li>
+    <li>
+      <strong>Para empezar uno nuevo</strong>, usa el botón <em>Crear libro</em>
+      arriba a la derecha del catálogo. Elige curso, materia y un título. Luego
+      ya escribes su contenido.
+    </li>
+    <li>
+      <strong>Si encuentras un fallo o tienes una idea</strong>, dentro de cada
+      libro tienes un apartado para abrir un <em>comentario</em> o una
+      <em>incidencia</em>. Eso lo verán todas las personas que trabajan en él.
+    </li>
+  </ol>
+  <details class="welcome-help">
+    <summary>Ayuda con el formato del texto (opcional)</summary>
+    <ul>
+      <li><code>**texto importante**</code> se ve como <strong>texto importante</strong>.</li>
+      <li><code>## Apartado</code> al inicio de una línea crea un título grande.</li>
+      <li><code>- una idea</code> al inicio de una línea crea un punto de una lista.</li>
+      <li>Una línea en blanco separa párrafos.</li>
+    </ul>
+    <p class="muted">No hace falta memorizar nada: si tienes dudas, escribe el texto plano y
+    alguien con experiencia en el equipo te ayudará a maquetarlo.</p>
+  </details>
+  <p class="muted">¿Te has perdido? Escríbenos a
+    <a href="mailto:libre_libros@proton.me">libre_libros@proton.me</a>
+    y te echamos una mano.</p>
 </section>
 
 {% if manageable_organizations %}

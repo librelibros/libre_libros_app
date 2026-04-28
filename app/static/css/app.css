@@ -240,6 +240,98 @@ label {
   text-decoration: underline;
 }
 
+/* Skip link para usuarios de teclado y lectores de pantalla. */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  padding: 0.5rem 1rem;
+  background: #000;
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  z-index: 1000;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+  outline: 3px solid #fff;
+}
+
+/* Tarjeta de bienvenida en la home. */
+.welcome-card {
+  position: relative;
+  border-left: 4px solid var(--accent, #2d6cdf);
+  padding-right: 3rem;
+}
+
+.welcome-card[hidden] {
+  display: none;
+}
+
+.welcome-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-close:hover,
+.welcome-close:focus-visible {
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.welcome-steps {
+  padding-left: 1.5rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  line-height: 1.55;
+}
+
+.welcome-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.4rem 0;
+}
+
+.welcome-help summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.welcome-help ul {
+  margin-top: 0.5rem;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.welcome-help code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+
 .alert {
   padding: 1rem 1.1rem;
   border-radius: var(--radius-md);
