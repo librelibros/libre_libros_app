@@ -51,6 +51,11 @@
         {% block content %}{% endblock %}
       </main>
     </div>
+    {% if contact_email %}
+    <footer class="site-footer muted">
+      Contacto: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
+    </footer>
+    {% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

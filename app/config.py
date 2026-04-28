@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     init_admin_email: str | None = None
     init_admin_password: str | None = None
     init_admin_name: str = "Admin"
+    contact_email: str | None = None
 
     google_client_id: str | None = None
     google_client_secret: str | None = None

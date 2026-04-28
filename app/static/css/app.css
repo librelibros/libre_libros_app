@@ -228,6 +228,18 @@ label {
   color: var(--muted);
 }
 
+.site-footer {
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.site-footer a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .alert {
   padding: 1rem 1.1rem;
   border-radius: var(--radius-md);

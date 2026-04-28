@@ -99,6 +99,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 templates.env.globals["app_name"] = settings.app_name
+templates.env.globals["contact_email"] = settings.contact_email
 
 app.include_router(auth.router)
 app.include_router(dashboard.router)

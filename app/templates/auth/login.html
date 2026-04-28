@@ -57,5 +57,10 @@
       <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario local</a></p>
       {% endif %}
     </section>
+    {% if contact_email %}
+    <footer class="site-footer muted">
+      Contacto: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
+    </footer>
+    {% endif %}
   </body>
 </html>
