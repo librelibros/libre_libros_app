@@ -6,10 +6,22 @@ services:
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
+      # --- Core app ---
       - key: LIBRE_LIBROS_SECRET_KEY
-        generateValue: true
+        sync: false
+      # Production database. Set this to the Supabase Postgres connection
+      # string (Project Settings -> Database -> Connection string -> URI).
+      # Example: postgresql+psycopg://postgres:<password>@db.<ref>.supabase.co:5432/postgres
       - key: LIBRE_LIBROS_DATABASE_URL
-        value: sqlite:////tmp/libre_libros.db
+        sync: false
+
+      # --- Supabase client (used by app.supabase_client) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+
+      # --- Bootstrap content repo ---
       - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_PROVIDER
         value: github
       - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAME
@@ -26,6 +38,8 @@ services:
         value: true
       - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_TOKEN
         sync: false
+
+      # --- Auth ---
       - key: LIBRE_LIBROS_EXTERNAL_AUTH_ONLY
         value: true
       - key: LIBRE_LIBROS_GITHUB_OAUTH_ENABLED
