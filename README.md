@@ -64,9 +64,11 @@ Docker usa `.env_docker`, con rutas internas del contenedor (`/app/data`).
 
 En modo debug, `docker compose` levanta también un GitLab local en `http://127.0.0.1:8081`, genera la configuración OAuth mínima y arranca Libre Libros con login delegado a GitLab.
 
-## Despliegue gratuito
+## Despliegue
 
-Para publicar una demo pequeña con el repositorio de libros en GitHub, ver [docs/deploy-free.md](docs/deploy-free.md).
+Producción (push a `main` → GitHub Actions → Render → Supabase Postgres) está documentada en [docs/deploy-render-supabase.md](docs/deploy-render-supabase.md). Incluye los 6 secrets requeridos, las reglas de la URL Postgres (pooler, driver, URL-encoding), y la skill `/check-deploy` para verificar el pipeline antes de pushear.
+
+Demos sencillas con repositorio de libros en GitHub: ver [docs/deploy-free.md](docs/deploy-free.md).
 
 ## Usuario inicial
 
