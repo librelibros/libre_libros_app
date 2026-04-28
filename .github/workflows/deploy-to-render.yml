@@ -12,10 +12,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate required secrets
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          LIBRE_LIBROS_SECRET_KEY: ${{ secrets.LIBRE_LIBROS_SECRET_KEY }}
+          LIBRE_LIBROS_DATABASE_URL: ${{ secrets.LIBRE_LIBROS_DATABASE_URL }}
         run: |
           missing=0
           for v in RENDER_API_KEY RENDER_SERVICE_ID SUPABASE_URL SUPABASE_KEY LIBRE_LIBROS_SECRET_KEY LIBRE_LIBROS_DATABASE_URL; do
-            if [ -z "${{ secrets[$v] || '' }}" ]; then
+            if [ -z "${!v:-}" ]; then
               echo "Secret $v is not set in repository settings. Please add it." >&2
               missing=1
             fi
