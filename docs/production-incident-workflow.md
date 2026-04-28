@@ -125,6 +125,29 @@ Si después de 10 min el live no refleja el cambio:
 
 Mantén una entrada corta por incidencia para no repetir errores.
 
+### 2026-04-28 — `/healthz/db` + cron keepalive + footer de contacto
+
+- **Pedido por**: usuario en sesión interactiva tras detectar que el footer no aparecía.
+- **Cambios**:
+  - Nuevo endpoint `/healthz/db` ejecuta `select 1` contra el engine; devuelve 503 si la DB no responde. `/healthz` queda como liveness probe ligero.
+  - Nuevo workflow [keepalive.yml](../.github/workflows/keepalive.yml) con `cron: '*/10 * * * *'` haciendo `GET /healthz` con 3 reintentos y 90s timeout. Render free duerme el servicio tras 15 min sin tráfico; con margen de 5 min, basta para mantenerlo caliente.
+  - `LIBRE_LIBROS_CONTACT_EMAIL=libre_libros@proton.me` se hardcodea como upsert no condicional en el workflow (espejo del `value:` de `render.yaml`). Antes era `upsert_optional` y como el secret no estaba creado, el footer no salía.
+- **Fix**: commit `6588028`.
+- **Verificación live**: `/healthz/db` devuelve `{"status":"ok","db":"ok"}` (Postgres responde), `/login` renderiza el footer con `mailto:` clicable.
+
+### 2026-04-28 — Libros del repo de contenido no aparecían en producción
+
+- **Reportado por**: usuario en sesión interactiva.
+- **Síntoma**: el repo `librelibros/libre_libros_content` tiene 16 `book.md` con la estructura esperada (`books/<curso>/<materia>/<slug>/book.md`, parts=5), pero ningún libro aparecía en producción.
+- **Diagnóstico**:
+  - `/books` requiere sesión, así que no era observable directamente sin login.
+  - Reproducido en local con un Docker apuntando al mismo repo público + SQLite: el sync poblaba 16 libros sin tocar nada. Por tanto el bug no era de código.
+  - Las env vars `LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_*` vivían en `render.yaml` con `value:`. **Mismo patrón** que la incidencia de `EXTERNAL_AUTH_ONLY`: servicio Render creado a mano → `value:` del yaml no se aplica → bootstrap no se ejecuta porque `bootstrap_repository_provider AND bootstrap_repository_name` resuelven a `None`.
+- **Fix**: commit `beb40ef`.
+  - Workflow hardcodea como upsert no condicional los 7 flags estables: `PROVIDER`, `NAME`, `SLUG`, `NAMESPACE`, `NAME_REMOTE`, `DEFAULT_BRANCH`, `PUBLIC`.
+  - Lifespan ahora loguea explícitamente: WARNING si la config bootstrap falta, INFO al iniciar y al terminar el sync, exception completa si falla. Antes el sync podía morir silenciosamente.
+- **Lección**: la regla "modos de operación estables → workflow, no `render.yaml`" hay que aplicarla **en bloque a todas las env vars no-secret estables**, no a las que toque ahora. Si una env var es estable (`value:` en yaml) y el servicio es manual, drift garantizado. Y si una pieza del lifespan puede tirar excepción, hay que loguearla — lección recurrente, no esperar a la siguiente incidencia.
+
 ### 2026-04-28 — `/register` mostraba formulario local en producción
 
 - **Reportado por**: usuario en sesión interactiva.
