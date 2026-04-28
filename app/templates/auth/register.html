@@ -8,8 +8,9 @@
   </head>
   <body class="auth-page">
     <section class="auth-card">
-      <p class="eyebrow">Alta simple</p>
-      <h1>Crear usuario</h1>
+      <p class="eyebrow">Alta local</p>
+      <h1>Crear usuario local</h1>
+      <p class="muted">Este formulario solo se usa en desarrollo o administración interna. En producción, el alta se realiza con una cuenta de GitHub.</p>
       {% if error %}
       <div class="alert alert-error">{{ error }}</div>
       {% endif %}
@@ -32,4 +33,3 @@
     </section>
   </body>
 </html>
-

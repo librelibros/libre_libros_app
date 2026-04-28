@@ -25,7 +25,7 @@ class SimulatedUser:
     password: str
 
     @property
-    def branch_name(self) -> str:
+    def legacy_branch_name(self) -> str:
         return f"users/{slugify(self.full_name)}"
 
 
@@ -33,6 +33,7 @@ class SimulatedUser:
 class BookTarget:
     book_id: int
     title: str
+    course: str
 
 
 @dataclass
@@ -53,10 +54,41 @@ def parse_args() -> argparse.Namespace:
 def list_books(database_path: Path, *, limit: int = 3) -> list[BookTarget]:
     with sqlite3.connect(database_path) as connection:
         rows = connection.execute(
-            "select id, title from books order by id asc limit ?",
+            "select id, title, course from books order by id asc limit ?",
             (limit,),
         ).fetchall()
-    return [BookTarget(book_id=row[0], title=row[1]) for row in rows]
+    return [BookTarget(book_id=row[0], title=row[1], course=row[2]) for row in rows]
+
+
+def resolve_branch_name(repo_path: Path, user: SimulatedUser, book: BookTarget) -> str:
+    preferred_branch = f"{user.legacy_branch_name}/base/{slugify(book.course)}"
+    existing_branches = {
+        line.strip()
+        for line in subprocess.run(
+            ["git", "branch", "--format=%(refname:short)"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        if line.strip()
+    }
+    if preferred_branch in existing_branches:
+        return preferred_branch
+
+    preferred_parts = [part for part in preferred_branch.split("/") if part]
+    conflicting_prefixes = [
+        "/".join(preferred_parts[:index])
+        for index in range(2, len(preferred_parts))
+        if "/".join(preferred_parts[:index]) in existing_branches
+    ]
+    if conflicting_prefixes:
+        return conflicting_prefixes[-1]
+
+    if user.legacy_branch_name in existing_branches:
+        return user.legacy_branch_name
+
+    return preferred_branch
 
 
 def build_parallel_markdown(book: BookTarget, user: SimulatedUser, note: str) -> str:
@@ -79,6 +111,7 @@ def run_user_flow(
     base_url: str,
     user: SimulatedUser,
     book: BookTarget,
+    branch_name: str,
     note: str,
     start_barrier: threading.Barrier,
     comment_barrier: threading.Barrier,
@@ -98,7 +131,7 @@ def run_user_flow(
         if "Libros por curso y materia" not in register.text:
             raise RuntimeError(f"Registro incompleto para {user.email}")
 
-        edit_page = client.get(f"/books/{book.book_id}/edit", params={"branch": user.branch_name})
+        edit_page = client.get(f"/books/{book.book_id}/edit", params={"branch": branch_name})
         edit_page.raise_for_status()
         if "Guardar" not in edit_page.text:
             raise RuntimeError(f"El editor no abrio correctamente para {user.email}")
@@ -108,21 +141,21 @@ def run_user_flow(
         save_response = client.post(
             f"/books/{book.book_id}/edit",
             data={
-                "branch_name": user.branch_name,
+                "branch_name": branch_name,
                 "content": build_parallel_markdown(book, user, note),
                 "commit_message": "",
             },
         )
         save_response.raise_for_status()
-        if f"Cambios guardados en la rama {user.branch_name}." not in save_response.text:
-            raise RuntimeError(f"El guardado no confirmo la rama {user.branch_name}")
+        if f"Cambios guardados en la rama {branch_name}." not in save_response.text:
+            raise RuntimeError(f"El guardado no confirmo la rama {branch_name}")
 
         comment_barrier.wait(timeout=10)
 
         comment_response = client.post(
             f"/books/{book.book_id}/comments",
             data={
-                "branch_name": user.branch_name,
+                "branch_name": branch_name,
                 "anchor": "revision-final",
                 "body": comment_body,
             },
@@ -131,19 +164,19 @@ def run_user_flow(
         if "Comentario anadido correctamente." not in comment_response.text:
             raise RuntimeError(f"No se pudo registrar el comentario de {user.email}")
 
-        detail_response = client.get(f"/books/{book.book_id}", params={"branch": user.branch_name})
+        detail_response = client.get(f"/books/{book.book_id}", params={"branch": branch_name})
         detail_response.raise_for_status()
         if note not in detail_response.text:
-            raise RuntimeError(f"El contenido editado no aparece en la rama {user.branch_name}")
+            raise RuntimeError(f"El contenido editado no aparece en la rama {branch_name}")
         if comment_body not in detail_response.text:
-            raise RuntimeError(f"El comentario no aparece para {user.branch_name}")
+            raise RuntimeError(f"El comentario no aparece para {branch_name}")
 
     return FlowResult(
         user=user,
         book=book,
-        commit_subject=f"Update {book.title} on {user.branch_name}",
+        commit_subject=f"Update {book.title} on {branch_name}",
         comment_body=comment_body,
-        branch_name=user.branch_name,
+        branch_name=branch_name,
     )
 
 
@@ -230,11 +263,13 @@ def main() -> int:
 
         def worker(user: SimulatedUser, book: BookTarget, note: str) -> None:
             try:
+                branch_name = resolve_branch_name(example_repo_path, user, book)
                 results.append(
                     run_user_flow(
                         base_url=args.base_url,
                         user=user,
                         book=book,
+                        branch_name=branch_name,
                         note=note,
                         start_barrier=start_barrier,
                         comment_barrier=comment_barrier,

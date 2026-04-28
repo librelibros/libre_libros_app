@@ -25,8 +25,8 @@ def repository_client_for(source: RepositorySource):
             token=service_token,
             default_branch=source.default_branch,
         )
-    if not (namespace and repository_name and service_token):
-        raise ValueError("GitHub repositories require namespace, repository and token")
+    if not (namespace and repository_name):
+        raise ValueError("GitHub repositories require namespace and repository")
     return GitHubRepositoryClient(
         owner=namespace,
         repo=repository_name,

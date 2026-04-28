@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: libre-libros
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: LIBRE_LIBROS_SECRET_KEY
+        generateValue: true
+      - key: LIBRE_LIBROS_DATABASE_URL
+        value: sqlite:////tmp/libre_libros.db
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_PROVIDER
+        value: github
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAME
+        value: Libre Libros Content
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_SLUG
+        value: libre-libros-content
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAMESPACE
+        value: librelibros
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAME_REMOTE
+        value: libre_libros_content
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_DEFAULT_BRANCH
+        value: main
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_PUBLIC
+        value: true
+      - key: LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_TOKEN
+        sync: false
+      - key: LIBRE_LIBROS_EXTERNAL_AUTH_ONLY
+        value: true
+      - key: LIBRE_LIBROS_GITHUB_OAUTH_ENABLED
+        value: true
+      - key: LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID
+        sync: false
+      - key: LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: LIBRE_LIBROS_GITHUB_OAUTH_NAME
+        value: GitHub
+      - key: LIBRE_LIBROS_INIT_ADMIN_EMAIL
+        sync: false
+      - key: LIBRE_LIBROS_INIT_ADMIN_PASSWORD
+        sync: false
+      - key: LIBRE_LIBROS_INIT_ADMIN_NAME
+        value: Administrador

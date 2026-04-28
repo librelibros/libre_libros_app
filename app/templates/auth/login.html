@@ -11,13 +11,22 @@
       <p class="eyebrow">Plataforma editorial</p>
       <h1>Acceder a Libre Libros</h1>
       <p class="muted">
-        Plataforma para colegios e instituciones que gestionan libros colaborativos en Git y GitHub.
+        Libre Libros usa cuentas de GitHub para identificar a quienes crean, editan y proponen cambios en los libros.
       </p>
       {% if error %}
       <div class="alert alert-error">{{ error }}</div>
       {% endif %}
+      {% if github_enabled %}
+      <div class="stack compact">
+        <a class="button" href="/auth/github/start">Entrar o crear cuenta con {{ github_name }}</a>
+        <p class="muted">Si es tu primera vez, GitHub te pedirá autorización y Libre Libros creará tu perfil automáticamente.</p>
+      </div>
+      {% endif %}
       {% if not external_auth_only %}
       <form method="post" action="/login" class="stack">
+        {% if github_enabled %}
+        <p class="muted">Acceso local solo para administración y desarrollo.</p>
+        {% endif %}
         <label>
           Correo
           <input type="email" name="email" required />
@@ -33,7 +42,7 @@
       {% endif %}
       <div class="stack compact">
         {% if gitlab_enabled %}
-        <a class="button" href="/auth/gitlab/start">Entrar con {{ gitlab_name }}</a>
+        <a class="button button-tonal" href="/auth/gitlab/start">Entrar con {{ gitlab_name }}</a>
         {% endif %}
         {% if google_enabled %}
         <a class="button button-tonal" href="/auth/google/start">Entrar con Google</a>
@@ -42,8 +51,10 @@
         <a class="button button-tonal" href="/auth/oidc/start">Entrar con SSO</a>
         {% endif %}
       </div>
-      {% if not external_auth_only %}
-      <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario</a></p>
+      {% if github_enabled %}
+      <p class="muted">¿No tienes cuenta de GitHub? <a href="/register">Crear cuenta en GitHub</a></p>
+      {% elif not external_auth_only %}
+      <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario local</a></p>
       {% endif %}
     </section>
   </body>

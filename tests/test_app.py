@@ -454,6 +454,81 @@ def test_public_book_edit_link_falls_back_to_teacher_branch(tmp_path: Path):
     assert "users/ana-profe" in response.text
 
 
+def test_public_book_prefers_legacy_teacher_branch_when_repo_already_has_it(tmp_path: Path):
+    client = build_client(tmp_path)
+    with client:
+        pass
+
+    from app.database import SessionLocal
+    from app.models import User
+    from app.security import hash_password
+
+    subprocess.run(
+        ["git", "checkout", "-b", "users/ana-profe"],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "checkout", "main"],
+        cwd=tmp_path / "repo",
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    db = SessionLocal()
+    try:
+        db.add(
+            User(
+                full_name="Ana Profe",
+                email="ana-legacy@test.local",
+                password_hash=hash_password("profe12345"),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/login",
+        data={"email": "ana-legacy@test.local", "password": "profe12345"},
+        follow_redirects=True,
+    )
+    assert login_response.status_code == 200
+
+    response = client.get("/books/1?workspace=personal")
+    assert response.status_code == 200
+    assert 'href="/books/1/edit?branch=users/ana-profe"' in response.text
+
+
+def test_register_redirects_to_github_when_github_login_is_enabled(tmp_path: Path, monkeypatch):
+    client = build_client(tmp_path)
+
+    from app.routers import auth
+
+    monkeypatch.setitem(auth.oauth._registry, "github", object())
+
+    response = client.get("/register", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/auth/github/start"
+
+
+def test_github_email_prefers_primary_verified_email():
+    from app.routers.auth import _github_email
+
+    email = _github_email(
+        {"email": None},
+        [
+            {"email": "secondary@example.com", "verified": True, "primary": False},
+            {"email": "primary@example.com", "verified": True, "primary": True},
+        ],
+    )
+
+    assert email == "primary@example.com"
+
+
 def test_local_git_repository_serializes_parallel_process_writes(tmp_path: Path):
     client = build_client(tmp_path)
     with client:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from urllib.parse import quote
 
 import httpx
 
@@ -8,23 +9,26 @@ from app.services.repository.base import RepositoryClient, RepositoryFileWrite
 
 
 class GitHubRepositoryClient(RepositoryClient):
-    def __init__(self, owner: str, repo: str, token: str, default_branch: str = "main", api_url: str | None = None):
+    def __init__(self, owner: str, repo: str, token: str | None, default_branch: str = "main", api_url: str | None = None):
         self.owner = owner
         self.repo = repo
         self.token = token
         self.default_branch = default_branch
         api_root = (api_url or "https://api.github.com").rstrip("/")
+        self.public_raw_url = None if api_url else f"https://raw.githubusercontent.com/{owner}/{repo}"
         if api_root.endswith("/api/v3"):
             self.base_url = f"{api_root}/repos/{owner}/{repo}"
         else:
             self.base_url = f"{api_root}/repos/{owner}/{repo}"
 
     def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self.token}",
+        headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        return headers
 
     def _request(self, method: str, path: str, **kwargs):
         response = httpx.request(method, f"{self.base_url}{path}", headers=self._headers(), timeout=30.0, **kwargs)
@@ -56,6 +60,13 @@ class GitHubRepositoryClient(RepositoryClient):
         return [branch["name"] for branch in branches]
 
     def read_text(self, rel_path: str, branch_name: str) -> str:
+        if not self.token and self.public_raw_url:
+            encoded_path = quote(rel_path)
+            response = httpx.get(f"{self.public_raw_url}/{branch_name}/{encoded_path}", timeout=30.0)
+            if response.status_code == 404:
+                return ""
+            response.raise_for_status()
+            return response.text
         try:
             response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
         except httpx.HTTPStatusError as exc:
@@ -65,6 +76,13 @@ class GitHubRepositoryClient(RepositoryClient):
         return base64.b64decode(response["content"]).decode("utf-8")
 
     def read_binary(self, rel_path: str, branch_name: str) -> bytes:
+        if not self.token and self.public_raw_url:
+            encoded_path = quote(rel_path)
+            response = httpx.get(f"{self.public_raw_url}/{branch_name}/{encoded_path}", timeout=30.0)
+            if response.status_code == 404:
+                return b""
+            response.raise_for_status()
+            return response.content
         try:
             response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
         except httpx.HTTPStatusError as exc:
@@ -75,6 +93,18 @@ class GitHubRepositoryClient(RepositoryClient):
 
     def list_files(self, rel_path: str, branch_name: str) -> list[str]:
         try:
+            tree = self._request("GET", f"/git/trees/{branch_name}?recursive=1")
+            prefix = rel_path.strip("/")
+            return [
+                item["path"]
+                for item in tree.get("tree", [])
+                if item.get("type") == "blob" and (not prefix or item["path"] == prefix or item["path"].startswith(f"{prefix}/"))
+            ]
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in {404, 409}:
+                raise
+
+        try:
             response = self._request("GET", f"/contents/{rel_path}?ref={branch_name}")
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 404:
@@ -84,7 +114,13 @@ class GitHubRepositoryClient(RepositoryClient):
             if response.get("type") == "file":
                 return [response["path"]]
             return []
-        return [item["path"] for item in response if item.get("type") == "file"]
+        files: list[str] = []
+        for item in response:
+            if item.get("type") == "file":
+                files.append(item["path"])
+            elif item.get("type") == "dir":
+                files.extend(self.list_files(item["path"], branch_name))
+        return files
 
     def _content_sha(self, rel_path: str, branch_name: str) -> str | None:
         try:

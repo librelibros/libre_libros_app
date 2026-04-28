@@ -25,6 +25,7 @@ from app.services.permissions import (
     course_branch_slug,
     organization_for_slug,
     parse_branch_context,
+    user_branch_name,
     user_workspace_branch_name,
 )
 from app.services.repository.factory import repository_client_for
@@ -44,6 +45,32 @@ def _message_from_request(request: Request) -> str | None:
 def _redirect_with_message(path: str, message: str, **params: str) -> RedirectResponse:
     query = urlencode({**params, "message": message})
     return RedirectResponse(f"{path}?{query}" if query else path, status_code=303)
+
+
+def _preferred_personal_branch(repo, user: User, organization_slug: str | None, course_name: str) -> str:
+    preferred_branch = user_workspace_branch_name(user, organization_slug, course_name)
+    legacy_branch = user_branch_name(user)
+    try:
+        existing_branches = set(repo.list_branches())
+    except Exception:
+        return preferred_branch
+
+    if preferred_branch in existing_branches:
+        return preferred_branch
+
+    preferred_parts = [part for part in preferred_branch.split("/") if part]
+    conflicting_prefixes = [
+        "/".join(preferred_parts[:index])
+        for index in range(2, len(preferred_parts))
+        if "/".join(preferred_parts[:index]) in existing_branches
+    ]
+    if conflicting_prefixes:
+        return conflicting_prefixes[-1]
+
+    if legacy_branch in existing_branches:
+        return legacy_branch
+
+    return preferred_branch
 
 
 def _asset_snippet(filename: str) -> str:
@@ -268,6 +295,7 @@ def _resolve_version_context(
     workspace: str | None,
     branch: str | None,
 ) -> dict[str, object]:
+    repo = repository_client_for(book.repository_source)
     available_courses = _distinct_course_options(db, book)
     available_schools = _school_options(db)
     selected_course = course_version.strip() if course_version else book.course
@@ -288,7 +316,7 @@ def _resolve_version_context(
     if branch:
         selected_branch = branch
     elif selected_workspace == WORKSPACE_PERSONAL and user:
-        selected_branch = user_workspace_branch_name(user, selected_school_slug or None, selected_course)
+        selected_branch = _preferred_personal_branch(repo, user, selected_school_slug or None, selected_course)
     elif selected_school_slug:
         selected_branch = approved_branch_name(selected_school_slug, selected_course)
     else:
@@ -296,7 +324,7 @@ def _resolve_version_context(
 
     approved_branch = approved_branch_name(selected_school_slug, selected_course) if selected_school_slug else book.base_branch
     personal_branch = (
-        user_workspace_branch_name(user, selected_school_slug or None, selected_course)
+        _preferred_personal_branch(repo, user, selected_school_slug or None, selected_course)
         if user
         else None
     )

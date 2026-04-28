@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import re
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date
@@ -123,9 +124,11 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
         screenshot(page, output_dir, "04-book-detail")
         observations.append(Observation("Consultar libro", "El libro se abre con indice, paginacion y contenido navegable."))
 
+        page.get_by_label("Version").select_option("personal")
+        page.wait_for_load_state("networkidle")
+        expect(page.locator(".chip").filter(has_text="Mi version docente").first).to_be_visible()
         page.get_by_role("link", name="Editar").first.click()
         page.wait_for_load_state("networkidle")
-        page.get_by_label("Espacio de trabajo").select_option("users/ana-profe")
         page.get_by_role("button", name="Recursos").click()
         page.locator("[data-insert-worksheet]").first.click()
         page.get_by_role("button", name="Edición").click()
@@ -148,7 +151,7 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
         screenshot(page, output_dir, "06-editor-content", full_page=False)
         page.get_by_role("button", name="Guardar cambios").click()
         page.wait_for_load_state("networkidle")
-        expect(page.get_by_text("Cambios guardados en la rama users/ana-profe.")).to_be_visible()
+        expect(page.get_by_text(re.compile(r"Cambios guardados en la rama users/ana-profe(?:/base/primaria)?\."))).to_be_visible()
         expect(page.get_by_text("Recursos anadidos: foto-de-clase.png.")).to_be_visible()
         screenshot(page, output_dir, "07-detail-updated")
         observations.append(
@@ -175,7 +178,6 @@ def run_flow(base_url: str, output_dir: Path, headed: bool) -> list[Observation]
         screenshot(page, output_dir, "09-comment-removed")
         observations.append(Observation("Corregir comentario", "La profesora puede retirar su comentario si lo anadio por error."))
 
-        page.get_by_label("Rama origen").select_option("users/ana-profe")
         page.get_by_label("Título").last.fill("Adaptacion de proyecto lector para el aula")
         page.get_by_label("Descripción").last.fill("Se anade una actividad final con salto de pagina e imagen de apoyo.")
         page.get_by_role("button", name="Abrir pull request").click()

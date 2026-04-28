@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Callable, TextIO
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from journey_support import snapshot_example_repo
@@ -453,6 +454,7 @@ def run_edit_columns_pdf_story(page: Page, base_url: str, output_dir: Path) -> t
     paced_click(page, page.get_by_role("button", name="Guardar cambios"))
     page.wait_for_load_state("networkidle")
     pause_for_video(page)
+    current_branch = parse_qs(urlparse(page.url).query).get("branch", ["main"])[0]
 
     active_page_body = page.locator("[data-book-page].is-active article.markdown-body")
     expect(page.locator("[data-book-page].is-active .doc-columns-2").last).to_be_visible()
@@ -460,7 +462,7 @@ def run_edit_columns_pdf_story(page: Page, base_url: str, output_dir: Path) -> t
     expect(active_page_body).to_contain_text("Texto de la segunda columna con apoyo visual.")
     expect(active_page_body.locator("img[src*='column-demo-image']").first).to_be_visible()
 
-    export_response = page.context.request.get(f"{detail_url}/export/pdf?branch=main")
+    export_response = page.context.request.get(f"{detail_url}/export/pdf?branch={current_branch}")
     if not export_response.ok:
         raise PlaywrightError(f"Exportacion PDF fallo con estado {export_response.status}")
     pdf_name = f"user-story-{EDIT_COLUMNS_PDF_STORY.slug}.pdf"
@@ -479,7 +481,7 @@ def run_admin_logout_story(page: Page, base_url: str) -> tuple[str, str]:
     page.goto(f"{base_url}/admin", wait_until="networkidle")
     pause_for_video(page)
     expect(page.get_by_role("heading", name="Alta simple")).to_be_visible()
-    expect(page.get_by_role("heading", name="Git local o GitHub")).to_be_visible()
+    expect(page.get_by_role("heading", name="Proveedores Git")).to_be_visible()
     pause_for_video(page)
     logout(page, base_url)
     return (

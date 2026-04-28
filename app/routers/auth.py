@@ -37,6 +37,16 @@ def _init_oauth() -> None:
             client_secret=settings.generic_oidc_client_secret,
             client_kwargs={"scope": "openid email profile"},
         )
+    if settings.github_oauth_enabled and settings.github_oauth_client_id and settings.github_oauth_client_secret:
+        oauth.register(
+            name="github",
+            client_id=settings.github_oauth_client_id,
+            client_secret=settings.github_oauth_client_secret,
+            authorize_url="https://github.com/login/oauth/authorize",
+            access_token_url="https://github.com/login/oauth/access_token",
+            api_base_url="https://api.github.com/",
+            client_kwargs={"scope": "read:user user:email"},
+        )
     if settings.gitlab_enabled and settings.gitlab_url and settings.gitlab_client_id and settings.gitlab_client_secret:
         gitlab_public_url = settings.gitlab_url.rstrip("/")
         gitlab_internal_url = (settings.gitlab_internal_url or settings.gitlab_url).rstrip("/")
@@ -64,8 +74,10 @@ def login_page(request: Request, user=Depends(get_current_user)):
         context={
             "oidc_enabled": "oidc" in oauth._registry,
             "google_enabled": "google" in oauth._registry,
+            "github_enabled": "github" in oauth._registry,
             "gitlab_enabled": "gitlab" in oauth._registry,
             "external_auth_only": settings.external_auth_only,
+            "github_name": settings.github_oauth_name,
             "gitlab_name": settings.gitlab_name,
         },
     )
@@ -89,8 +101,10 @@ def login(
                 "error": "Credenciales no válidas.",
                 "oidc_enabled": "oidc" in oauth._registry,
                 "google_enabled": "google" in oauth._registry,
+                "github_enabled": "github" in oauth._registry,
                 "gitlab_enabled": "gitlab" in oauth._registry,
                 "external_auth_only": settings.external_auth_only,
+                "github_name": settings.github_oauth_name,
                 "gitlab_name": settings.gitlab_name,
             },
             status_code=400,
@@ -104,6 +118,8 @@ def login(
 
 @router.get("/register")
 def register_page(request: Request):
+    if "github" in oauth._registry:
+        return RedirectResponse("/auth/github/start", status_code=303)
     if settings.external_auth_only:
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(name="auth/register.html", request=request, context={})
@@ -117,6 +133,8 @@ def register(
     email: str = Form(...),
     password: str = Form(...),
 ):
+    if "github" in oauth._registry:
+        return RedirectResponse("/auth/github/start", status_code=303)
     if settings.external_auth_only:
         return RedirectResponse("/login", status_code=303)
     normalized_email = email.lower().strip()
@@ -170,6 +188,45 @@ def _upsert_oidc_user(db: Session, email: str, name: str, provider: str) -> User
         user.global_role = GlobalRole.admin
         db.commit()
     return user
+
+
+def _github_email(user_info: dict, emails: list[dict]) -> str | None:
+    if user_info.get("email"):
+        return user_info["email"]
+    primary_verified = [
+        email["email"]
+        for email in emails
+        if email.get("primary") and email.get("verified") and email.get("email")
+    ]
+    if primary_verified:
+        return primary_verified[0]
+    verified = [email["email"] for email in emails if email.get("verified") and email.get("email")]
+    if verified:
+        return verified[0]
+    return None
+
+
+@router.get("/auth/github/start")
+async def github_start(request: Request):
+    if "github" not in oauth._registry:
+        return RedirectResponse("/login", status_code=303)
+    redirect_uri = request.url_for("github_callback")
+    return await oauth.github.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/auth/github/callback", name="github_callback")
+async def github_callback(request: Request, db: Session = Depends(get_db)):
+    token = await oauth.github.authorize_access_token(request)
+    user_response = await oauth.github.get("user", token=token)
+    user_info = user_response.json()
+    emails_response = await oauth.github.get("user/emails", token=token)
+    email = _github_email(user_info, emails_response.json())
+    if not email:
+        return RedirectResponse("/login", status_code=303)
+    name = user_info.get("name") or user_info.get("login") or ""
+    user = _upsert_oidc_user(db, email, name, "github")
+    request.session["user_id"] = user.id
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/auth/google/start")

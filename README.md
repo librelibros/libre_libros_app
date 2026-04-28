@@ -64,6 +64,10 @@ Docker usa `.env_docker`, con rutas internas del contenedor (`/app/data`).
 
 En modo debug, `docker compose` levanta también un GitLab local en `http://127.0.0.1:8081`, genera la configuración OAuth mínima y arranca Libre Libros con login delegado a GitLab.
 
+## Despliegue gratuito
+
+Para publicar una demo pequeña con el repositorio de libros en GitHub, ver [docs/deploy-free.md](docs/deploy-free.md).
+
 ## Usuario inicial
 
 Si configuras estas variables en `.env`, al arrancar se crea un admin automáticamente:

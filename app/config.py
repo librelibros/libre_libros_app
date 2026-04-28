@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     generic_oidc_client_secret: str | None = None
     generic_oidc_server_metadata_url: str | None = None
     generic_oidc_name: str = "Single Sign-On"
+    github_oauth_enabled: bool = False
+    github_oauth_client_id: str | None = None
+    github_oauth_client_secret: str | None = None
+    github_oauth_name: str = "GitHub"
     gitlab_enabled: bool = False
     gitlab_url: str | None = None
     gitlab_internal_url: str | None = None
