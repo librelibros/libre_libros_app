@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -82,6 +83,9 @@ def sync_bootstrap_content() -> None:
         db.close()
 
 
+_logger = logging.getLogger("libre_libros.startup")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Path("data").mkdir(exist_ok=True)
@@ -89,7 +93,23 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_runtime_schema()
     create_default_admin()
-    sync_bootstrap_content()
+    if settings.bootstrap_repository_provider and settings.bootstrap_repository_name:
+        _logger.info(
+            "bootstrap: syncing %s/%s from %s (branch=%s)",
+            settings.bootstrap_repository_namespace,
+            settings.bootstrap_repository_name_remote,
+            settings.bootstrap_repository_provider,
+            settings.bootstrap_repository_default_branch,
+        )
+    else:
+        _logger.warning(
+            "bootstrap: skipped — LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_PROVIDER or _NAME not set",
+        )
+    try:
+        sync_bootstrap_content()
+        _logger.info("bootstrap: sync_example_repository finished")
+    except Exception:
+        _logger.exception("bootstrap: sync_example_repository failed")
     yield
 
 
