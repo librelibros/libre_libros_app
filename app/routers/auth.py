@@ -64,6 +64,16 @@ def _init_oauth() -> None:
 _init_oauth()
 
 
+_EXTERNAL_PROVIDER_PRIORITY = ("github", "gitlab", "google", "oidc")
+
+
+def _first_external_start_url() -> str | None:
+    for provider in _EXTERNAL_PROVIDER_PRIORITY:
+        if provider in oauth._registry:
+            return f"/auth/{provider}/start"
+    return None
+
+
 @router.get("/login")
 def login_page(request: Request, user=Depends(get_current_user)):
     if user:
@@ -118,8 +128,9 @@ def login(
 
 @router.get("/register")
 def register_page(request: Request):
-    if "github" in oauth._registry:
-        return RedirectResponse("/auth/github/start", status_code=303)
+    external = _first_external_start_url()
+    if external:
+        return RedirectResponse(external, status_code=303)
     if settings.external_auth_only:
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(name="auth/register.html", request=request, context={})
@@ -133,8 +144,9 @@ def register(
     email: str = Form(...),
     password: str = Form(...),
 ):
-    if "github" in oauth._registry:
-        return RedirectResponse("/auth/github/start", status_code=303)
+    external = _first_external_start_url()
+    if external:
+        return RedirectResponse(external, status_code=303)
     if settings.external_auth_only:
         return RedirectResponse("/login", status_code=303)
     normalized_email = email.lower().strip()

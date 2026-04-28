@@ -51,8 +51,8 @@
         <a class="button button-tonal" href="/auth/oidc/start">Entrar con SSO</a>
         {% endif %}
       </div>
-      {% if github_enabled %}
-      <p class="muted">¿No tienes cuenta de GitHub? <a href="/register">Crear cuenta en GitHub</a></p>
+      {% if github_enabled or gitlab_enabled or google_enabled or oidc_enabled %}
+      <p class="muted">¿No tienes cuenta? <a href="/register">Crea una con tu proveedor de identidad</a></p>
       {% elif not external_auth_only %}
       <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario local</a></p>
       {% endif %}

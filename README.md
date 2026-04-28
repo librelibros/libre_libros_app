@@ -68,6 +68,8 @@ En modo debug, `docker compose` levanta también un GitLab local en `http://127.
 
 Producción (push a `main` → GitHub Actions → Render → Supabase Postgres) está documentada en [docs/deploy-render-supabase.md](docs/deploy-render-supabase.md). Incluye los 6 secrets requeridos, las reglas de la URL Postgres (pooler, driver, URL-encoding), y la skill `/check-deploy` para verificar el pipeline antes de pushear.
 
+Para arreglar bugs detectados en la URL pública sigue el procedimiento estándar de [docs/production-incident-workflow.md](docs/production-incident-workflow.md): reproducir con `curl`, diagnosticar capa (código / workflow / Render), smoke test local en Docker con las env vars de prod, push y verificar live.
+
 Demos sencillas con repositorio de libros en GitHub: ver [docs/deploy-free.md](docs/deploy-free.md).
 
 ## Usuario inicial

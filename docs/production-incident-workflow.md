@@ -1,0 +1,134 @@
+# Resoluciones en producción
+
+Procedimiento estándar para diagnosticar y arreglar bugs detectados en `https://libre-libros-app.onrender.com/` (o el host de prod que sea). Aplica para incidencias funcionales, de auth, de configuración o de despliegue. **No** aplica para incidentes de datos, GDPR o caídas de Supabase — esos requieren su propio runbook.
+
+## Cuándo aplicarlo
+
+- El usuario o el oncall reporta un comportamiento incorrecto en la URL pública.
+- El deploy salió verde en GitHub Actions pero el comportamiento real en Render no es el esperado (drift entre código y plataforma).
+- Una env var nueva no se aplicó (servicio Render creado a mano, no por Blueprint).
+
+Si el síntoma es un 5xx o el `/healthz` falla → primero estabilizar (rollback en Render Dashboard → Deploys → Rollback) y luego este flujo.
+
+## El flujo, paso a paso
+
+### 1. Reproducir el bug en live, sin el navegador
+
+Captura el síntoma con `curl` para que tengas un registro objetivo y reproducible:
+
+```bash
+HOST=https://libre-libros-app.onrender.com
+curl -fsS $HOST/healthz
+curl -sS -o /dev/null -w 'HTTP %{http_code} -> %{redirect_url}\n' $HOST/ -L --max-redirs 0
+curl -fsS $HOST/login   | grep -E 'site-footer|github|input type='
+curl -fsS $HOST/register | head -80
+```
+
+Anota: HTTP code, headers relevantes, fragmentos de HTML que contradicen lo esperado.
+
+### 2. Diagnosticar capa por capa
+
+Tres capas posibles, en orden de coste de arreglo:
+
+1. **Código** — la lógica del router/template no cubre el caso. Arreglo local + smoke test + push.
+2. **Configuración del workflow** — un secret no se está sincronizando, o un flag de modo no se está hardcodeando. Editar `.github/workflows/deploy-to-render.yml`.
+3. **Estado de Render** — el servicio fue creado a mano y arrastra env vars antiguas. Forzar el upsert desde el workflow (más fiable que tocar Render Dashboard a mano).
+
+Lectura crítica: muchas veces el bug no es de código, es que el `render.yaml` declara una env var con `value:` pero el servicio fue creado antes de que ese valor existiera, así que no se aplica nunca. La regla práctica:
+
+> Si una env var es **modo de operación** (no es secret y debe ser estable), hardcodéala en el workflow como `upsert "KEY" "valor"` para que cada deploy la reaplique. Así el render.yaml es documentación, pero el workflow es la fuente de verdad.
+
+### 3. Arreglar localmente
+
+```bash
+cd libre_libros_app
+# código
+$EDITOR app/routers/...
+# y/o workflow
+$EDITOR .github/workflows/deploy-to-render.yml
+```
+
+### 4. Smoke test reproduciendo el escenario de producción
+
+Construye y arranca el contenedor con las MISMAS env vars que tendrá producción tras el fix. Verifica el escenario que rompía Y los escenarios adyacentes para no romper otros caminos.
+
+```bash
+docker build -t lll-fix .
+
+# Escenario producción objetivo (external auth + OAuth configurado):
+docker run --rm -d --name llv \
+  -p 18091:8000 \
+  -e LIBRE_LIBROS_DATABASE_URL='sqlite:////tmp/x.db' \
+  -e LIBRE_LIBROS_EXTERNAL_AUTH_ONLY=true \
+  -e LIBRE_LIBROS_GITHUB_OAUTH_ENABLED=true \
+  -e LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID=fake \
+  -e LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_SECRET=fake \
+  lll-fix
+sleep 5
+curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://localhost:18091/register
+docker stop llv
+```
+
+Comprueba al menos:
+- El path bug-on-prod (sin OAuth aún): `LIBRE_LIBROS_EXTERNAL_AUTH_ONLY=true` sin client id/secret.
+- El path final (con OAuth): los 4 vars OAuth presentes.
+- El path dev: ninguna env var de auth — comportamiento legacy.
+
+### 5. Validar el resto con la skill `/check-deploy`
+
+```bash
+python scripts/check_deploy.py
+```
+
+Revisa que: env local OK, Supabase REST OK, cliente Python OK, Postgres OK (si exportas la URL), y los secrets de GitHub si `gh` está autenticado.
+
+### 6. Commit y push
+
+Usa un mensaje que diga **qué se rompía y dónde**. El "por qué" lo dirá el código y la doc.
+
+```bash
+git add app/ docs/ .github/ render.yaml
+git commit -m "fix(auth): /register redirige a OAuth externo cuando hay provider; force-apply external_auth_only desde el workflow"
+git push origin main
+```
+
+Push dispara el workflow → workflow PUTea las env vars en Render → workflow lanza deploy → Render rebuildea.
+
+### 7. Verificar live
+
+Espera ~3-5 min al rebuild y reproduce el `curl` del paso 1. Compara HTTP codes y fragmentos. Solo cierras la incidencia cuando el curl post-fix demuestra el comportamiento esperado.
+
+```bash
+HOST=https://libre-libros-app.onrender.com
+curl -sS -o /dev/null -w 'HTTP %{http_code} -> %{redirect_url}\n' $HOST/register
+curl -fsS $HOST/login | grep -E 'site-footer|github|formulario'
+```
+
+Si después de 10 min el live no refleja el cambio:
+- `gh run list --workflow="Deploy to Render" -L 3` → ¿el último run terminó verde?
+- Si verde, abrir Render Dashboard → Logs del último deploy. ¿La env var nueva sale en `Building` con el valor esperado?
+- Si la env var no aparece, el step `Sync env vars to Render` no la cubrió → volver a paso 2.
+
+### 8. Cerrar
+
+- Si la fix tocó env vars: añade el caso a la tabla "Modos de fallo conocidos" de [deploy-render-supabase.md](deploy-render-supabase.md).
+- Si la fix tocó código de auth/UI: añade un test mínimo en `tests/` o un smoke test reproducible en este doc.
+
+## Anti-patrones
+
+- ❌ **Editar env vars en Render Dashboard a mano**. El siguiente deploy puede sobrescribirlas (si el workflow las upsertaa) o, peor, mantenerlas indefinidamente y crear drift entre prod y código.
+- ❌ **Pushear sin smoke test local**. Si el escenario de prod tiene flags raros, reprodúcelo en Docker antes — un build de Render gasta 3-5 min y un fail allí es ciclo lento.
+- ❌ **Asumir que `render.yaml` se aplica**. Solo se aplica para servicios creados por Blueprint. Para servicios manuales, lo único que llega es lo que el workflow upsertea.
+- ❌ **Confundir "deploy verde en GitHub" con "fix en producción"**. El workflow hace `POST /deploys` y termina; el deploy real ocurre en Render después y puede fallar silenciosamente. Verifica con `curl` post-deploy, siempre.
+
+## Bitácora
+
+Mantén una entrada corta por incidencia para no repetir errores. Formato sugerido (en este mismo archivo o en `docs/incidents/`):
+
+```
+## YYYY-MM-DD — síntoma corto
+- **Reportado por**: ...
+- **Causa raíz**: ...
+- **Fix**: commit hash + un párrafo
+- **Lección**: ...
+```

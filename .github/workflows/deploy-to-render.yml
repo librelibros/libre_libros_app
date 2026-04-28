@@ -73,6 +73,11 @@ jobs:
           upsert "SUPABASE_KEY"               "$SUPABASE_KEY"
           upsert "LIBRE_LIBROS_SECRET_KEY"    "$LIBRE_LIBROS_SECRET_KEY"
           upsert "LIBRE_LIBROS_DATABASE_URL"  "$LIBRE_LIBROS_DATABASE_URL"
+          # Operating mode flags (not secret, but force-applied on every deploy
+          # so a manually-created Render service can't drift away from them).
+          upsert "LIBRE_LIBROS_EXTERNAL_AUTH_ONLY"   "true"
+          upsert "LIBRE_LIBROS_GITHUB_OAUTH_ENABLED" "true"
+          upsert "LIBRE_LIBROS_GITHUB_OAUTH_NAME"    "GitHub"
           upsert_optional "LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID"        "$LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID"
           upsert_optional "LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_SECRET"    "$LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_SECRET"
           upsert_optional "LIBRE_LIBROS_INIT_ADMIN_EMAIL"              "$LIBRE_LIBROS_INIT_ADMIN_EMAIL"
