@@ -123,7 +123,24 @@ Si después de 10 min el live no refleja el cambio:
 
 ## Bitácora
 
-Mantén una entrada corta por incidencia para no repetir errores. Formato sugerido (en este mismo archivo o en `docs/incidents/`):
+Mantén una entrada corta por incidencia para no repetir errores.
+
+### 2026-04-28 — `/register` mostraba formulario local en producción
+
+- **Reportado por**: usuario en sesión interactiva.
+- **Síntoma**: `https://libre-libros-app.onrender.com/register` devolvía `200 OK` con un `<h1>Crear usuario local</h1>` y un formulario email/password, en vez de delegar a GitHub OAuth.
+- **Causa raíz** (dos capas):
+  1. [app/routers/auth.py](../app/routers/auth.py) hardcodeaba el nombre del provider externo (`if "github" in oauth._registry`) en `/register` GET y POST. Si GitHub OAuth no estaba registrado, caía en la rama de form local sin distinguir entornos.
+  2. `LIBRE_LIBROS_EXTERNAL_AUTH_ONLY=true` se declaraba en `render.yaml` con `value:`, pero el servicio Render fue creado a mano, no por Blueprint, así que ese valor no se aplicaba — drift entre `render.yaml` y la realidad de Render.
+- **Fix**: commit `d8d1a48`.
+  - Helper `_first_external_start_url()` que itera por prioridad (github → gitlab → google → oidc) y redirige al primero registrado.
+  - Workflow hardcodea `upsert "LIBRE_LIBROS_EXTERNAL_AUTH_ONLY" "true"` (más `GITHUB_OAUTH_ENABLED`, `GITHUB_OAUTH_NAME`) como upserts no condicionales en cada deploy.
+  - Copy del template `login.html` adaptado a cualquier provider externo, no solo GitHub.
+- **Lección**: si una env var es **modo de operación estable y no secreta**, hardcodéala en el workflow como `upsert KEY VALOR`. `render.yaml` solo se aplica a servicios creados desde Blueprint — para servicios creados a mano, lo único confiable es el upsert del workflow. Esta regla queda explicitada en la sección "Diagnosticar capa por capa".
+
+---
+
+Formato sugerido para futuras entradas:
 
 ```
 ## YYYY-MM-DD — síntoma corto
