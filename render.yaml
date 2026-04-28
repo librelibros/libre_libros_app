@@ -57,4 +57,4 @@ services:
       - key: LIBRE_LIBROS_INIT_ADMIN_NAME
         value: Administrador
       - key: LIBRE_LIBROS_CONTACT_EMAIL
-        sync: false
+        value: libre_libros@proton.me

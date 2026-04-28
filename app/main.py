@@ -3,7 +3,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -130,3 +132,13 @@ app.include_router(admin.router)
 @app.get("/healthz", include_in_schema=False)
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/healthz/db", include_in_schema=False)
+def healthz_db():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("select 1"))
+    except Exception as exc:
+        return JSONResponse({"status": "error", "db": str(exc)[:200]}, status_code=503)
+    return {"status": "ok", "db": "ok"}

@@ -87,6 +87,9 @@ jobs:
           upsert "LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_NAME_REMOTE"    "libre_libros_content"
           upsert "LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_DEFAULT_BRANCH" "main"
           upsert "LIBRE_LIBROS_BOOTSTRAP_REPOSITORY_PUBLIC"         "true"
+          # Public-facing contact (footer). Mirrored in render.yaml; workflow
+          # is authoritative because the Render service was created manually.
+          upsert "LIBRE_LIBROS_CONTACT_EMAIL"                       "libre_libros@proton.me"
           upsert_optional "LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID"        "$LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID"
           upsert_optional "LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_SECRET"    "$LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_SECRET"
           upsert_optional "LIBRE_LIBROS_INIT_ADMIN_EMAIL"              "$LIBRE_LIBROS_INIT_ADMIN_EMAIL"
