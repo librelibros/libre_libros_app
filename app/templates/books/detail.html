@@ -144,36 +144,37 @@
     <div class="section-header">
       <div>
         <p class="eyebrow">Revisión</p>
-        <h2>Issues y pull requests</h2>
+        <h2>Avisos y propuestas de cambio</h2>
       </div>
     </div>
     {% if user %}
     <form method="post" action="/books/{{ book.id }}/issues" class="stack">
       <label>
-        Nuevo issue
+        Nuevo aviso de problema
         <input type="text" name="title" required placeholder="Falta una actividad de repaso" />
       </label>
       <label>
         Descripción
-        <textarea name="body" rows="3"></textarea>
+        <textarea name="body" rows="3" placeholder="Cuenta brevemente qué pasa: en qué página, qué falta o qué está mal."></textarea>
       </label>
-      <button class="button button-tonal" type="submit">Crear issue</button>
+      <p class="muted">Un aviso es como una nota: avisa al equipo de un fallo o una idea, pero no cambia el libro por ti.</p>
+      <button class="button button-tonal" type="submit">Enviar aviso</button>
     </form>
 
     {% if can_create_proposal %}
     <form method="post" action="/books/{{ book.id }}/pull-requests" class="stack">
       <input type="hidden" name="head_branch" value="{{ proposal_head_branch }}" />
       <input type="hidden" name="base_branch" value="{{ proposal_base_branch }}" />
-      <p class="muted">La propuesta se abrirá desde tu versión docente hacia la versión aprobada visible en este momento.</p>
+      <p class="muted">Tu propuesta de cambio recoge lo que has editado y se envía para que se revise antes de pasar a la versión visible para todo el mundo.</p>
       <label>
-        Título
+        Título de la propuesta
         <input type="text" name="title" required placeholder="Propuesta de adaptación para el centro" />
       </label>
       <label>
         Descripción
-        <textarea name="body" rows="3"></textarea>
+        <textarea name="body" rows="3" placeholder="Resumen de los cambios y por qué los propones."></textarea>
       </label>
-      <button class="button" type="submit">Abrir pull request</button>
+      <button class="button" type="submit">Enviar propuesta de cambio</button>
     </form>
     {% endif %}
     {% if user and version_context.can_manage_selected_version and selected_branch != version_context.approved_branch %}
@@ -191,8 +192,8 @@
       {% set review = entry.review %}
       <div class="comment">
         <div class="comment-head">
-          <strong>{{ review.kind.value }}</strong>
-          <span class="chip">{{ review.status.value }}</span>
+          <strong>{{ review_kind_labels.get(review.kind.value, review.kind.value) }}</strong>
+          <span class="chip">{{ review_status_labels.get(review.status.value, review.status.value) }}</span>
           {% if review.head_branch %}
           <span class="chip">{{ entry.head_label }} → {{ entry.base_label }}</span>
           {% else %}
@@ -201,11 +202,11 @@
         </div>
         <p>{{ review.title }}</p>
         {% if review.external_url %}
-        <a href="{{ review.external_url }}" target="_blank" rel="noreferrer">Abrir en proveedor</a>
+        <a href="{{ review.external_url }}" target="_blank" rel="noreferrer">Ver en GitHub</a>
         {% endif %}
       </div>
       {% else %}
-      <p class="muted">No hay revisión registrada para este libro.</p>
+      <p class="muted">Todavía no hay avisos ni propuestas de cambio para este libro.</p>
       {% endfor %}
     </div>
   </article>

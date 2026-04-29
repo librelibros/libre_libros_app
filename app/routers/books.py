@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import mimetypes
 from pathlib import Path
 from urllib.parse import urlencode
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from slugify import slugify
@@ -38,13 +40,58 @@ WORKSPACE_SHARED = "shared"
 WORKSPACE_PERSONAL = "personal"
 
 
+_logger = logging.getLogger("libre_libros.books")
+
+
 def _message_from_request(request: Request) -> str | None:
     return request.query_params.get("message")
+
+
+def _error_from_request(request: Request) -> str | None:
+    return request.query_params.get("error")
 
 
 def _redirect_with_message(path: str, message: str, **params: str) -> RedirectResponse:
     query = urlencode({**params, "message": message})
     return RedirectResponse(f"{path}?{query}" if query else path, status_code=303)
+
+
+def _redirect_with_error(path: str, error: str, **params: str) -> RedirectResponse:
+    query = urlencode({**params, "error": error})
+    return RedirectResponse(f"{path}?{query}" if query else path, status_code=303)
+
+
+def _friendly_github_error(exc: httpx.HTTPStatusError, *, action: str) -> str:
+    """Translate a GitHub API HTTP error into a teacher-friendly Spanish message."""
+    code = exc.response.status_code
+    detail: str = ""
+    try:
+        payload = exc.response.json()
+        detail = payload.get("message") or ""
+        if isinstance(payload.get("errors"), list) and payload["errors"]:
+            first = payload["errors"][0]
+            if isinstance(first, dict) and first.get("message"):
+                detail = first["message"]
+    except Exception:
+        detail = (exc.response.text or "")[:200]
+
+    detail_lower = detail.lower()
+    if "no commits between" in detail_lower:
+        return (
+            "No hay cambios que proponer: tu versión y la versión publicada son idénticas. "
+            "Edita el libro primero y guarda al menos un cambio antes de enviar la propuesta."
+        )
+    if "a pull request already exists" in detail_lower or "already exists" in detail_lower:
+        return "Ya existe una propuesta de cambio abierta desde esta versión. Revísala antes de crear otra."
+    if code == 401 or code == 403:
+        return (
+            "No tenemos permiso para hacer esa operación en GitHub. "
+            "Avisa a la persona que administra Libre Libros para revisar el token de acceso."
+        )
+    if code == 404:
+        return "GitHub no encuentra una de las ramas. Probablemente aún no se ha guardado tu versión en el repositorio."
+
+    return f"GitHub ha rechazado la operación al {action}: {detail or 'sin detalle'}."
 
 
 def _preferred_personal_branch(repo, user: User, organization_slug: str | None, course_name: str) -> str:
@@ -585,6 +632,7 @@ def book_detail(
                 for comment in book.comments
             ],
             "message": _message_from_request(request),
+            "error": _error_from_request(request),
         },
     )
 
@@ -913,7 +961,14 @@ def create_issue(
     if not book or not can_view_book(user, book):
         raise HTTPException(status_code=404, detail="Book not found")
     repo = repository_client_for(book.repository_source)
-    issue = repo.create_issue(title=title, body=body)
+    try:
+        issue = repo.create_issue(title=title, body=body)
+    except httpx.HTTPStatusError as exc:
+        _logger.warning("create_issue failed: status=%s body=%s", exc.response.status_code, exc.response.text[:300])
+        return _redirect_with_error(f"/books/{book.id}", _friendly_github_error(exc, action="crear el aviso"))
+    except Exception as exc:
+        _logger.exception("create_issue unexpected error")
+        return _redirect_with_error(f"/books/{book.id}", f"No se pudo registrar el aviso: {exc}")
     record = ReviewRequest(
         book_id=book.id,
         repo_source_id=book.repository_source_id,
@@ -928,7 +983,7 @@ def create_issue(
     )
     db.add(record)
     db.commit()
-    return _redirect_with_message(f"/books/{book.id}", "Issue registrado correctamente.")
+    return _redirect_with_message(f"/books/{book.id}", "Aviso registrado correctamente.")
 
 
 @router.post("/{book_id}/pull-requests")
@@ -946,11 +1001,22 @@ def create_pull_request(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PR not allowed")
     target_branch = base_branch.strip() or book.base_branch
     if head_branch == target_branch:
-        raise HTTPException(status_code=400, detail="Head branch must differ from base branch")
+        return _redirect_with_error(
+            f"/books/{book.id}",
+            "No hay nada que proponer: estás intentando enviar la versión publicada hacia sí misma. "
+            "Edita primero el libro en tu versión docente y guarda los cambios antes de enviar la propuesta.",
+        )
 
     repo = repository_client_for(book.repository_source)
-    repo.ensure_branch(target_branch, book.base_branch)
-    pr = repo.create_pull_request(title=title, body=body, head_branch=head_branch, base_branch=target_branch)
+    try:
+        repo.ensure_branch(target_branch, book.base_branch)
+        pr = repo.create_pull_request(title=title, body=body, head_branch=head_branch, base_branch=target_branch)
+    except httpx.HTTPStatusError as exc:
+        _logger.warning("create_pull_request failed: status=%s body=%s", exc.response.status_code, exc.response.text[:300])
+        return _redirect_with_error(f"/books/{book.id}", _friendly_github_error(exc, action="enviar la propuesta de cambio"))
+    except Exception as exc:
+        _logger.exception("create_pull_request unexpected error")
+        return _redirect_with_error(f"/books/{book.id}", f"No se pudo enviar la propuesta de cambio: {exc}")
     record = ReviewRequest(
         book_id=book.id,
         repo_source_id=book.repository_source_id,
@@ -967,7 +1033,7 @@ def create_pull_request(
     db.commit()
     return _redirect_with_message(
         f"/books/{book.id}",
-        "Pull request registrada correctamente.",
+        "Propuesta de cambio enviada para revisión.",
         branch=head_branch,
     )
 

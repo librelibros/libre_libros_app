@@ -44,8 +44,9 @@
     </li>
     <li>
       <strong>Si encuentras un fallo o tienes una idea</strong>, dentro de cada
-      libro tienes un apartado para abrir un <em>comentario</em> o una
-      <em>incidencia</em>. Eso lo verán todas las personas que trabajan en él.
+      libro puedes dejar un <em>comentario</em> o enviar un
+      <em>aviso de problema</em>. Lo verán todas las personas que
+      trabajan en ese libro.
     </li>
   </ol>
   <details class="welcome-help">
@@ -125,7 +126,7 @@
   <div class="section-header">
     <div>
       <p class="eyebrow">Revisión</p>
-      <h2>Issues y propuestas de cambio</h2>
+      <h2>Avisos y propuestas de cambio</h2>
     </div>
   </div>
   {% if recent_reviews %}
@@ -142,12 +143,12 @@
       <tbody>
         {% for item in recent_reviews %}
         <tr>
-          <td>{{ item.kind.value }}</td>
+          <td>{{ review_kind_labels.get(item.kind.value, item.kind.value) }}</td>
           <td>{{ item.title }}</td>
-          <td>{{ item.status.value }}</td>
+          <td>{{ review_status_labels.get(item.status.value, item.status.value) }}</td>
           <td>
             {% if item.external_url %}
-            <a href="{{ item.external_url }}" target="_blank" rel="noreferrer">Abrir</a>
+            <a href="{{ item.external_url }}" target="_blank" rel="noreferrer">Ver en GitHub</a>
             {% else %}
             Local
             {% endif %}
@@ -158,7 +159,7 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">No hay actividad de revisión registrada todavía.</p>
+  <p class="muted">Todavía no hay avisos ni propuestas de cambio registradas.</p>
   {% endif %}
 </section>
 {% endblock %}

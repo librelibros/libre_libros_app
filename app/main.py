@@ -123,6 +123,19 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates.env.globals["app_name"] = settings.app_name
 templates.env.globals["contact_email"] = settings.contact_email
 
+# Etiquetas amigables para profesoras/profesores. Las plantillas las usan en
+# vez de los valores enum crudos (`issue`, `pull_request`, `merged`, ...).
+templates.env.globals["review_kind_labels"] = {
+    "issue": "Aviso de problema",
+    "pull_request": "Propuesta de cambio",
+}
+templates.env.globals["review_status_labels"] = {
+    "open": "Abierta",
+    "draft": "Borrador",
+    "merged": "Aceptada e integrada",
+    "closed": "Cerrada",
+}
+
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(books.router)

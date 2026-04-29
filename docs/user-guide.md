@@ -81,13 +81,15 @@ Dentro de cada libro tienes:
 
 - **Comentarios**: para discutir un detalle concreto con otras
   docentes. Como un margen del libro donde dejas notas.
-- **Issues** (incidencias): para reportar errores claros — una
-  errata, un dato desactualizado, un enlace roto.
-- **Pull requests** (propuestas de cambio): cuando ya has editado y
-  quieres que se revise para aprobar.
+- **Avisos de problema**: para reportar errores claros — una
+  errata, un dato desactualizado, un enlace roto. Son notas
+  formales que cualquiera del equipo puede ver y resolver.
+- **Propuestas de cambio**: cuando ya has editado y quieres
+  que tu versión sustituya o complemente la oficial. Otra
+  persona la revisará antes de aceptarla.
 
 No tienes que aprenderte la diferencia exacta. Si dudas, **abre un
-comentario**: siempre puedes convertirlo después en una incidencia
+comentario**: siempre puedes convertirlo después en un aviso
 si hace falta.
 
 ## Formato del texto (opcional)
@@ -143,9 +145,12 @@ tenemos para empezar a investigar.
 - **Libro**: un material de texto completo de una materia y curso.
 - **Hoja de trabajo / worksheet**: un capítulo o sección dentro de
   un libro.
-- **Propuesta de cambio (pull request)**: una versión nueva del
-  libro pendiente de aprobar.
-- **Issue / incidencia**: aviso de un problema en un libro.
+- **Propuesta de cambio**: una versión nueva del libro pendiente
+  de aprobar. Cuando se acepta, se integra y todo el mundo la ve.
+  (En la jerga técnica se llama *pull request*; no te hace falta
+  saberlo.)
+- **Aviso de problema**: nota que abres para advertir de un fallo
+  o pedir una mejora en un libro. (Técnicamente, un *issue*.)
 - **Repositorio**: el sitio en internet donde se guarda el contenido
   con todas sus versiones. No tienes que saber dónde está; la app
   se encarga.
