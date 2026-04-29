@@ -111,6 +111,41 @@ formato escribiendo símbolos junto al texto. Lo básico:
 Si dejas el texto plano sin ningún símbolo, también se publica bien.
 Lo único que no se hace por sí solo es la negrita o las listas.
 
+## Sobre el panel principal
+
+Arriba del todo en la home tienes la **campana de avisos y propuestas**. Si
+hay un número rojo encima de la campana es porque hay propuestas pendientes
+de revisar. La tabla justo debajo te dice:
+
+- **Tipo**: si es un aviso de problema o una propuesta de cambio.
+- **Libro**: cuál es el libro afectado.
+- **Estado**: *Abierta*, *Borrador*, *Aceptada e integrada* o *Cerrada*.
+- **Novedades**: cuántos cambios y comentarios nuevos lleva la propuesta.
+- **Enlace**: directo al detalle en GitHub si quieres ver el diff completo.
+
+Cuando una propuesta se acepta y se integra, su estado pasa solo a
+"Aceptada e integrada" en la siguiente vez que abras la home (la app
+consulta GitHub cada pocos minutos). Igual con los comentarios y
+nuevos cambios: aparecen como contadores en la columna "Novedades".
+
+## Sobre el diff de las propuestas
+
+Si abres tu propuesta en GitHub y ves **muchas líneas en rojo y verde
+aunque hayas tocado solo una palabra**, es por cómo el editor guarda
+el texto. El editor lee tu libro, lo abre como un documento de
+procesador de texto, y al guardar lo vuelve a escribir en su forma
+"limpia". Eso a veces cambia espacios, comillas o saltos de línea
+aunque tú no hayas tocado nada.
+
+Esto no es un fallo. Para revisar qué cambió de verdad, fíjate en
+**la página renderizada** de la propuesta (no en el diff bruto), o
+pide a la persona que revisa que vea el libro completo en lugar de
+línea por línea.
+
+> Si no escribiste nada y aun así pulsaste guardar, la app **no
+> abrirá una propuesta vacía**: detecta que no hay cambio real y
+> te muestra "No había cambios reales que guardar".
+
 ## Buenas prácticas
 
 - **Guarda con frecuencia.** Cada vez que pulsas guardar, queda

@@ -1,6 +1,88 @@
 {% extends "base.html" %}
 {% set title = "Panel" %}
 {% block content %}
+<section class="card stack reviews-banner" aria-labelledby="reviews-banner-title">
+  <div class="section-header">
+    <div class="reviews-banner-head">
+      <span class="reviews-bell" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 8a6 6 0 1 1 12 0c0 4 1.5 5.5 2.5 6.5H3.5C4.5 13.5 6 12 6 8Z"/>
+          <path d="M10 18a2 2 0 0 0 4 0"/>
+        </svg>
+        {% if open_reviews_count and open_reviews_count > 0 %}
+        <span class="reviews-bell-badge" aria-label="{{ open_reviews_count }} pendientes">{{ open_reviews_count }}</span>
+        {% endif %}
+      </span>
+      <div>
+        <p class="eyebrow">Para ti</p>
+        <h2 id="reviews-banner-title">Avisos y propuestas de cambio</h2>
+        <p class="muted">
+          {% if open_reviews_count and open_reviews_count > 0 %}
+          Hay {{ open_reviews_count }} {{ "propuesta" if open_reviews_count == 1 else "propuestas" }} pendiente{{ "" if open_reviews_count == 1 else "s" }} de revisar.
+          {% else %}
+          Todo al día. Cuando alguien envíe una propuesta nueva o haya novedades aparecerá aquí arriba.
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  </div>
+  {% if recent_reviews %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Libro</th>
+          <th>Título</th>
+          <th>Estado</th>
+          <th>Novedades</th>
+          <th>Enlace</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in recent_reviews %}
+        {% set is_open = item.status.value in ("open", "draft") %}
+        <tr class="{% if is_open %}row-open{% endif %}">
+          <td>{{ review_kind_labels.get(item.kind.value, item.kind.value) }}</td>
+          <td>
+            {% if item.book %}
+            <a href="/books/{{ item.book.id }}">{{ item.book.title }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ item.title }}</td>
+          <td>
+            <span class="status-pill status-{{ item.status.value }}">
+              {{ review_status_labels.get(item.status.value, item.status.value) }}
+            </span>
+          </td>
+          <td>
+            {% if item.kind.value == "pull_request" and item.commits_count %}
+              <span class="chip" title="Commits enviados a la propuesta">{{ item.commits_count }} cambio{{ "" if item.commits_count == 1 else "s" }}</span>
+            {% endif %}
+            {% if item.comments_count %}
+              <span class="chip" title="Comentarios en la propuesta">{{ item.comments_count }} coment.</span>
+            {% endif %}
+            {% if not item.commits_count and not item.comments_count %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if item.external_url %}
+            <a href="{{ item.external_url }}" target="_blank" rel="noreferrer">Ver en GitHub</a>
+            {% else %}
+            Local
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Todavía no hay avisos ni propuestas de cambio registradas.</p>
+  {% endif %}
+</section>
+
 <section class="grid stat-strip">
   <article class="card stat-card">
     <p class="eyebrow">Libros visibles</p>
@@ -122,44 +204,4 @@
   {% endif %}
 </section>
 
-<section class="card stack">
-  <div class="section-header">
-    <div>
-      <p class="eyebrow">Revisión</p>
-      <h2>Avisos y propuestas de cambio</h2>
-    </div>
-  </div>
-  {% if recent_reviews %}
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Tipo</th>
-          <th>Título</th>
-          <th>Estado</th>
-          <th>Enlace</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in recent_reviews %}
-        <tr>
-          <td>{{ review_kind_labels.get(item.kind.value, item.kind.value) }}</td>
-          <td>{{ item.title }}</td>
-          <td>{{ review_status_labels.get(item.status.value, item.status.value) }}</td>
-          <td>
-            {% if item.external_url %}
-            <a href="{{ item.external_url }}" target="_blank" rel="noreferrer">Ver en GitHub</a>
-            {% else %}
-            Local
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="muted">Todavía no hay avisos ni propuestas de cambio registradas.</p>
-  {% endif %}
-</section>
 {% endblock %}

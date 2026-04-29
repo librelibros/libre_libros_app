@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import Book, MembershipRole, OrganizationMembership, ReviewRequest, User, Visibility
+from app.models import Book, MembershipRole, OrganizationMembership, ReviewRequest, ReviewStatus, User, Visibility
 from app.services.permissions import can_view_book
+from app.services.review_sync import refresh_open_reviews
 from app.templates import templates
 
 router = APIRouter(tags=["dashboard"])
@@ -33,12 +34,20 @@ def home(
     for book in visible_books:
         grouped[book.course][book.subject].append(book)
 
+    # Refrescamos las propuestas abiertas contra GitHub antes de listar para
+    # que la home muestre el estado real (mergeada → "Aceptada", commits/comentarios
+    # nuevos). El servicio cachea por SYNC_TTL para no martillear la API.
+    if refresh_open_reviews(db) > 0:
+        db.commit()
+
     recent_reviews = (
         db.query(ReviewRequest)
+        .options(joinedload(ReviewRequest.book))
         .order_by(ReviewRequest.created_at.desc())
         .limit(10)
         .all()
     )
+    open_reviews_count = sum(1 for r in recent_reviews if r.status in (ReviewStatus.open, ReviewStatus.draft))
     manageable_org_ids = {
         membership.organization_id
         for membership in db.query(OrganizationMembership)
@@ -60,6 +69,7 @@ def home(
             "books_count": len(visible_books),
             "public_books_count": len([book for book in visible_books if book.visibility == Visibility.public]),
             "recent_reviews": recent_reviews,
+            "open_reviews_count": open_reviews_count,
             "manageable_organizations": manageable_organizations,
         },
     )

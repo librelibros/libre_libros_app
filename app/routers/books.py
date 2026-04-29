@@ -697,6 +697,24 @@ async def save_book(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Edit not allowed")
     repo = repository_client_for(book.repository_source)
     asset_writes, uploaded_filenames = await _prepare_asset_writes(assets, book)
+
+    # Detección de no-op: si el contenido enviado es byte-idéntico a lo que ya
+    # hay en la rama y no se suben assets, no creamos commit ni propuesta.
+    # Evita PRs vacías cuando el usuario abre el editor y guarda sin cambiar nada.
+    new_bytes = content.encode("utf-8")
+    if not asset_writes:
+        try:
+            current_text = repo.read_text(book.content_path, branch_name)
+            if current_text and current_text.encode("utf-8") == new_bytes:
+                return _redirect_with_message(
+                    f"/books/{book.id}",
+                    "No había cambios reales que guardar en esta versión.",
+                    branch=branch_name,
+                )
+        except Exception:
+            # Si la lectura falla seguimos con el flujo normal de escritura.
+            _logger.exception("save_book: lectura previa para detección de no-op falló")
+
     resolved_commit_message = (commit_message or "").strip() or _default_commit_message(
         book,
         branch_name,
@@ -704,7 +722,7 @@ async def save_book(
     )
     repo.write_files(
         branch_name=branch_name,
-        files=[RepositoryFileWrite(rel_path=book.content_path, content=content.encode("utf-8")), *asset_writes],
+        files=[RepositoryFileWrite(rel_path=book.content_path, content=new_bytes), *asset_writes],
         commit_message=resolved_commit_message,
         author_name=user.full_name,
         author_email=user.email,

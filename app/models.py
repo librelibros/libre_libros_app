@@ -184,6 +184,9 @@ class ReviewRequest(TimestampMixin, Base):
     status: Mapped[ReviewStatus] = mapped_column(SqlEnum(ReviewStatus), default=ReviewStatus.open)
     external_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     external_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    commits_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    comments_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     book: Mapped[Book] = relationship(back_populates="review_requests")
     repository_source: Mapped[RepositorySource] = relationship()

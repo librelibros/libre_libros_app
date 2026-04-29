@@ -257,3 +257,11 @@ class GitHubRepositoryClient(RepositoryClient):
 
     def create_issue(self, title: str, body: str) -> dict:
         return self._request("POST", "/issues", json={"title": title, "body": body})
+
+    def fetch_pull_request(self, number: int) -> dict:
+        # /pulls/{n} returns commits, comments, review_comments, state, merged_at,
+        # mergeable, head.sha — todo lo que necesitamos para sincronizar.
+        return self._request("GET", f"/pulls/{number}")
+
+    def fetch_issue(self, number: int) -> dict:
+        return self._request("GET", f"/issues/{number}")
