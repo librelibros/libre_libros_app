@@ -125,6 +125,30 @@ Si después de 10 min el live no refleja el cambio:
 
 Mantén una entrada corta por incidencia para no repetir errores.
 
+### 2026-04-29 — Cron keepalive de GitHub Actions no mantenía el servicio despierto
+
+- **Reportado por**: usuario al observar que la web seguía durmiendo tras 15 min de inactividad pese al workflow `keepalive.yml`.
+- **Diagnóstico**: la API pública de GitHub mostraba **solo 2 runs en 24 h** para un workflow con `cron: '*/10 * * * *'` (debería haber lanzado 144). Las 2 que sí corrieron terminaron en `success`, así que no era bug de código — era el scheduler de GitHub Actions saltándose las ejecuciones.
+- **Causa raíz**: GitHub documenta explícitamente que crons frecuentes son best-effort y se saltan en picos de carga. Es peor con minutos múltiplos de 5 o 10 (`*/5`, `*/10`) porque coinciden con stampedes globales: muchos repos públicos programan ahí, y el scheduler prioriza otras tareas.
+- **Fix**: commit (este).
+  - Workflow ahora define **3 schedules** con offsets primos (`3,17`, `31,45`, `58`). Aunque GitHub salte alguno, los otros llegan antes del límite de 15 min de Render. Cobertura efectiva: una ejecución programada cada ~14 min.
+  - Caveat documentado dentro del propio yaml + en esta sección.
+- **Solución estructural recomendada**: un monitor externo gratuito (UptimeRobot, cron-job.org) apuntando a `/healthz` cada 5 min. GitHub Actions cron no se diseñó para keepalive y nunca será fiable al 100 %.
+- **Lección**: nunca dependas del cron de GitHub Actions cuando un retraso causa daño funcional (servicio durmiendo, deadline de cron-jobs operativos). Sirve para tareas tolerantes a retraso (limpieza nocturna, informes diarios). Para tiempo de respuesta crítico: servicio externo dedicado.
+
+---
+
+#### Keepalive de Render — instalación de monitor externo (recomendado)
+
+Mientras la mitigación de schedules múltiples reduce el problema, lo más fiable es:
+
+1. Crea cuenta en https://uptimerobot.com (gratis, 50 monitors).
+2. New monitor → **HTTP(s)** → `https://libre-libros-app.onrender.com/healthz`.
+3. Monitoring interval: **5 minutes**.
+4. Alerta opcional por email si el servicio cae.
+
+Cuando lo tengas, puedes incluso eliminar el workflow `keepalive.yml` si quieres limpiar.
+
 ### 2026-04-29 — Propuestas no se actualizaban al mergear, diff "todo en rojo y verde", banner
 
 - **Pedido por**: usuario al ver que una propuesta seguía como "Abierta" tras mergearla en GitHub, que el diff de un PR mostraba todo el archivo como modificado, y que las propuestas estaban enterradas al fondo de la home.

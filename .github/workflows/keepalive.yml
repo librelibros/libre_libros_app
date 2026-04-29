@@ -1,13 +1,26 @@
 name: Keep Render service awake
 
 # Render free duerme el servicio tras 15 min sin tráfico (cold start ~30-60s).
-# Este workflow le manda un GET /healthz cada 10 min para mantenerlo caliente.
-# El cron de GitHub Actions puede demorarse en picos de carga, pero el margen
-# de 5 min sobre los 15 de Render es suficiente en la práctica.
+# Mantenemos un GET /healthz periódico para evitarlo.
+#
+# CAVEAT: GitHub Actions cron es best-effort. La doc oficial dice que durante
+# picos de carga los schedules se saltan, y se confirma en los runs históricos
+# de este repo: con `*/10 * * * *` solo se dispararon 2 ejecuciones en 24h.
+# Por eso definimos varios schedules con offsets primos (en vez de minutos
+# múltiplos de 5/10 que sufren stampedes globales): aunque GitHub salte
+# alguno, otro debería llegar antes del límite de 15 min de Render.
+#
+# Para fiabilidad real (>99 %), configura ADEMÁS un monitor externo gratuito:
+#   - UptimeRobot (https://uptimerobot.com) → 50 monitors, ping cada 5 min.
+#   - cron-job.org → cron remoto cada 1 min.
+# Apuntando a https://libre-libros-app.onrender.com/healthz. Ver
+# docs/production-incident-workflow.md, sección "Keepalive de Render".
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '3,17 * * * *'    # min 3 y 17 — ventana de 14 min
+    - cron: '31,45 * * * *'   # min 31 y 45 — ventana de 14 min
+    - cron: '58 * * * *'      # respaldo cerca del fin de hora
   workflow_dispatch:
 
 jobs:
