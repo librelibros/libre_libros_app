@@ -19,12 +19,13 @@
           <span class="sr-only">Libre Libros</span>
         </a>
         {% if user %}
-        <nav class="nav">
-          <a href="/">Panel</a>
-          <a href="/books">Libros</a>
-          <a href="/books/new">Nuevo libro</a>
+        {% set _path = request.url.path if request else "/" %}
+        <nav class="nav" aria-label="Navegación principal">
+          <a href="/"{% if _path == "/" %} aria-current="page"{% endif %}>Panel</a>
+          <a href="/books"{% if _path == "/books" or (_path.startswith("/books/") and _path != "/books/new") %} aria-current="page"{% endif %}>Libros</a>
+          <a href="/books/new"{% if _path == "/books/new" %} aria-current="page"{% endif %}>Nuevo libro</a>
           {% if user.global_role.value == "admin" %}
-          <a href="/admin">Administración</a>
+          <a href="/admin"{% if _path.startswith("/admin") %} aria-current="page"{% endif %}>Administración</a>
           {% endif %}
           <a href="/logout">Cerrar sesión</a>
         </nav>

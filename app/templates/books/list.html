@@ -36,6 +36,11 @@
   <div class="grid catalog-grid">
     {% for book in books %}
     <a class="card book-card" href="/books/{{ book.id }}">
+      <img class="book-cover"
+           src="/books/{{ book.id }}/assets/cover.svg"
+           alt="Portada de {{ book.title }} ({{ book.subject }}, {{ book.course }})"
+           loading="lazy"
+           data-fallback="hide" />
       <div class="chip-group">
         <span class="chip">{{ book.course }}</span>
         <span class="chip">{{ book.subject }}</span>

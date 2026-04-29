@@ -44,7 +44,17 @@ function attachDismissHandlers() {
   });
 }
 
+function attachImageFallbacks() {
+  // Cualquier <img data-fallback="hide"> que no cargue se elimina del DOM.
+  // Útil para portadas opcionales (cover.svg) cuyos repos pueden no incluirla.
+  document.querySelectorAll('img[data-fallback="hide"]').forEach((img) => {
+    img.addEventListener("error", () => img.remove(), { once: true });
+    if (img.complete && img.naturalWidth === 0) img.remove();
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   applyInitialState();
   attachDismissHandlers();
+  attachImageFallbacks();
 });
