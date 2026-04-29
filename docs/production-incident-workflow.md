@@ -125,6 +125,19 @@ Si después de 10 min el live no refleja el cambio:
 
 Mantén una entrada corta por incidencia para no repetir errores.
 
+### 2026-04-29 — 500 al enviar propuesta de cambio + jerga técnica en la UI
+
+- **Reportado por**: usuario en sesión interactiva al pulsar "Abrir pull request" en `/books/1/pull-requests`.
+- **Síntoma**: 500 Internal Server Error sin mensaje útil. Stack trace mostraba `httpx.HTTPStatusError` desde `app/services/repository/github_api.py:create_pull_request` → `response.raise_for_status()`.
+- **Causa raíz**: la ruta `POST /books/{id}/pull-requests` llamaba directa a la API de GitHub sin envolver la llamada. Cualquier respuesta 4xx (caso típico: PR sin commits porque el usuario no había editado todavía → 422 "No commits between main and feature") propagaba como excepción no manejada hasta el middleware de Starlette.
+- **Fix**: commit `a7bf6f9`.
+  - `_friendly_github_error()` clasifica el error de GitHub (422 sin commits / PR ya existe, 401/403 sin permiso, 404 rama no encontrada, fallback genérico) y devuelve un mensaje en español adecuado al docente, no a un dev.
+  - `create_issue` y `create_pull_request` envuelven la llamada en `try/except httpx.HTTPStatusError` → redirect 303 al detalle del libro con `?error=...`. La plantilla ya renderiza `alert-error` desde el contexto.
+  - Helpers `_redirect_with_error` / `_error_from_request` añadidos al lado de los de `message`. El detalle del libro pasa `error` al contexto.
+  - El check `head == base` que devolvía `HTTPException(400)` crudo ahora también usa el redirect amigable.
+  - Aprovechado para rebrand a lenguaje docente: `issue` → "Aviso de problema", `pull_request` → "Propuesta de cambio", estados `open/draft/merged/closed` → "Abierta/Borrador/Aceptada e integrada/Cerrada", "Abrir en proveedor" → "Ver en GitHub". Globals en `templates.env` para no salpicar las plantillas con condicionales repetidos.
+- **Lección**: cualquier ruta que llame a una API externa debe convertir errores HTTP en redirects amigables; un 500 con stack trace es siempre un fallo del controlador, no de la API. Y la jerga de Git ("issue", "pull request", "rama") no debe filtrarse a la UI cuando el público objetivo son profesores. Mantener `globals` con los labels traducidos centraliza el cambio si más adelante se internacionaliza.
+
 ### 2026-04-28 — `/healthz/db` + cron keepalive + footer de contacto
 
 - **Pedido por**: usuario en sesión interactiva tras detectar que el footer no aparecía.
