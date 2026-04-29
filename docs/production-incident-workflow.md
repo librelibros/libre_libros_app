@@ -125,6 +125,18 @@ Si después de 10 min el live no refleja el cambio:
 
 Mantén una entrada corta por incidencia para no repetir errores.
 
+### 2026-04-29 — Propuestas no se actualizaban al mergear, diff "todo en rojo y verde", banner
+
+- **Pedido por**: usuario al ver que una propuesta seguía como "Abierta" tras mergearla en GitHub, que el diff de un PR mostraba todo el archivo como modificado, y que las propuestas estaban enterradas al fondo de la home.
+- **Cambios**:
+  - `ReviewRequest` gana `commits_count`, `comments_count`, `last_synced_at`. `runtime_migrations.py` aplica los `ALTER TABLE review_requests ADD COLUMN` idempotentes en cada arranque.
+  - Nuevo `app/services/review_sync.py`: para cada propuesta abierta/borrador con `last_synced_at` más viejo de 5 min, consulta `/pulls/{n}` o `/issues/{n}`, mapea el estado y actualiza contadores. Errores silenciados con log para no romper la home si GitHub está caído.
+  - El dashboard llama a `refresh_open_reviews(db)` antes de listar; un `db.commit()` único persiste todo si hubo cambios.
+  - La home renderiza un banner al top con campana SVG, badge rojo con el número de propuestas abiertas y tabla enriquecida (libro afectado clickable, pills de estado coloreadas, contadores de commits/comentarios).
+  - `save_book` detecta no-ops: si el contenido es byte-idéntico al de la rama y no hay assets nuevos, no se escribe nada y se devuelve "No había cambios reales que guardar". Antes el editor rico canonicalizaba el markdown y generaba PRs con diff masivo aunque el usuario no hubiera tocado nada.
+- **Caveat documentado**: cuando hay un cambio real, el diff sigue mostrando ruido de formato porque el editor canonicaliza el markdown al guardar. Documentado en `docs/user-guide.md` (sección "Sobre el diff de las propuestas") con la recomendación de revisar la página renderizada en GitHub, no el diff bruto. Solución estructural (canonicalizar el contenido del repo una vez para que las roundtrips sean idempotentes) queda como trabajo futuro.
+- **Lección**: cuando una integración con un sistema externo modela "estado en este momento" (status, contador), hay que decidir desde el principio si lo sincronizas (pull periódico o webhook) o si solo es snapshot al crear. Si es lo segundo, dejarlo claro en la UI; si es lo primero, planificar el TTL y el manejo de fallos. Aquí elegimos pull con cache de 5 min porque webhook requiere infra extra.
+
 ### 2026-04-29 — 500 al enviar propuesta de cambio + jerga técnica en la UI
 
 - **Reportado por**: usuario en sesión interactiva al pulsar "Abrir pull request" en `/books/1/pull-requests`.
