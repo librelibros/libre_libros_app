@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-labelledby="title desc">
+  <title id="title">Libre Libros — libro abierto azul</title>
+  <desc id="desc">Dos páginas curvas con lomo central y una línea de lectura por página.</desc>
+  <path fill="#2457C5" d="M3 5C8 4 12 6 16 8C20 6 24 4 29 5V25C24 24 20 26 16 28C12 26 8 24 3 25Z"/>
+  <path d="M16 9V25M7 12C9 12 11 13 12 14M20 14C22 13 24 12 25 12" fill="none" stroke="#FFF" stroke-width="2" stroke-linecap="round"/>
+</svg>

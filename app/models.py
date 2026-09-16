@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -64,6 +64,7 @@ class User(TimestampMixin, Base):
     )
     auth_provider: Mapped[str] = mapped_column(String(50), default="local")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    session_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 
     memberships: Mapped[list["OrganizationMembership"]] = relationship(
         back_populates="user",
@@ -92,6 +93,7 @@ class Organization(TimestampMixin, Base):
 
 class OrganizationMembership(TimestampMixin, Base):
     __tablename__ = "organization_memberships"
+    __table_args__ = (UniqueConstraint("user_id", "organization_id", name="uq_membership_user_org"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
@@ -100,6 +102,32 @@ class OrganizationMembership(TimestampMixin, Base):
 
     user: Mapped[User] = relationship(back_populates="memberships")
     organization: Mapped[Organization] = relationship(back_populates="memberships")
+
+
+class Invitation(Base):
+    __tablename__ = "invitations"
+    __table_args__ = (CheckConstraint("membership_role = 'editor'", name="ck_invitation_editor"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    email_normalized: Mapped[str] = mapped_column(String(255), index=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    membership_role: Mapped[MembershipRole] = mapped_column(SqlEnum(MembershipRole), default=MembershipRole.editor)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ExternalIdentity(Base):
+    __tablename__ = "external_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_external_identity"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(1024))
+    subject: Mapped[str] = mapped_column(String(255))
 
 
 class RepositorySource(TimestampMixin, Base):

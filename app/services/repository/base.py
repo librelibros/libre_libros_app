@@ -4,6 +4,19 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 
+def validate_repository_path(rel_path: str) -> str:
+    """Accept only relative POSIX paths; never normalize away unsafe segments."""
+    if (
+        not rel_path
+        or "\\" in rel_path
+        or ":" in rel_path
+        or any(ord(char) < 32 or ord(char) == 127 for char in rel_path)
+        or any(part in {"", ".", "..", ".git"} for part in rel_path.split("/"))
+    ):
+        raise ValueError("Ruta de repositorio no válida")
+    return rel_path
+
+
 @dataclass(frozen=True)
 class RepositoryFileWrite:
     rel_path: str

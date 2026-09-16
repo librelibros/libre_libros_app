@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Libre Libros · Estudio independiente de marca</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #192d40; background: #f0f3f6; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; }
+    main { max-width: 1160px; margin: auto; }
+    h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); margin: 12px 0; letter-spacing: -.03em; }
+    h2 { margin: 0 0 8px; }
+    p { line-height: 1.6; max-width: 85ch; }
+    a { color: #1747aa; text-underline-offset: 3px; }
+    .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .78rem; font-weight: 750; }
+    .notice { background: #fff; border-left: 4px solid #2457c5; padding: 14px 20px; }
+    .candidate { margin: 32px 0; background: #fff; border: 1px solid #d7dee6; border-radius: 16px; overflow: hidden; }
+    .intro { padding: 24px; }
+    .lockup { display: flex; align-items: center; gap: 14px; margin: 16px 0; }
+    .lockup img { width: 48px; height: 48px; object-fit: contain; }
+    .wordmark { font-size: 26px; font-weight: 750; letter-spacing: -.03em; }
+    .matrix { margin: 0; }
+    .sample-row { padding: 20px 24px; border-top: 1px solid #d7dee6; }
+    .sample-row h3 { font-size: .875rem; margin: 0 0 16px; }
+    .light { background: #fff; color: #192d40; }
+    .dark { background: #112a36; color: #f5f9fb; }
+    .samples { display: grid; grid-template-columns: repeat(4, minmax(70px, 1fr)) minmax(176px, 1.6fr); gap: 16px; align-items: end; }
+    figure { margin: 0; text-align: center; }
+    .slot { height: 168px; display: flex; align-items: center; justify-content: center; }
+    .slot img { display: block; object-fit: contain; max-width: none; flex: none; }
+    figcaption { margin-top: 10px; font-size: .8rem; font-variant-numeric: tabular-nums; }
+    .gray img { filter: grayscale(1); }
+    .ink img { filter: brightness(0); }
+    .fine { font-size: .85rem; }
+    footer { padding-bottom: 24px; }
+    @media (max-width: 680px) {
+      body { padding: 16px; }
+      .intro, .sample-row { padding: 16px; }
+      .samples { grid-template-columns: repeat(4, minmax(40px, 1fr)); gap: 8px; }
+      .samples figure:last-child { grid-column: 1 / -1; }
+      .samples figure:not(:last-child) .slot { height: 56px; }
+    }
+    @media print { body { padding: 0; } .sample-row { break-inside: avoid; } * { print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Laboratorio independiente · Propuestas, no identidad aprobada</p>
+    <h1>Libre Libros: libro primero, nombre aparte</h1>
+    <p>Comparación óptica de una copia intacta de la marca actual y dos dibujos originales. El objetivo es hacer reconocible el libro abierto a tamaño pequeño; no se ha probado con personas ni se afirma que el símbolo sea inequívoco.</p>
+    <p class="notice"><strong>No cambia el producto.</strong> La web A/B mantiene el logo actual en ambas variantes para controlar esa variable. Estos archivos no son recursos de producción.</p>
+    <p><a href="Audit.md">Leer evidencia, límites y auditoría</a></p>
+    <p class="fine">Cajas reales de 16, 24, 32, 48 y 160 píxeles CSS, sin ampliación. Consultar con zoom del navegador al 100 %. El original conserva su proporción 220:96, por lo que ocupa menos altura dentro de cada caja cuadrada. El nombre se compone en HTML con fuentes del sistema, fuera del icono.</p>
+    <p class="fine">Monocromo tonal = escala de grises mediante CSS. La fila de tinta plana es una prueba de pérdida de detalle (todos los píxeles opacos pasan a negro), no una versión monocroma final.</p>
+  </header>
+  <div id="comparisons"></div>
+  <noscript><p>Activa JavaScript para generar las matrices locales. SVG disponibles: <a href="mark-current-copy.svg">actual</a>, <a href="mark-blue.svg">azul</a>, <a href="mark-teal.svg">verde petróleo</a>.</p></noscript>
+  <footer><p class="fine">Sin fuentes descargadas, bibliotecas externas ni solicitudes a terceros. Los dibujos propuestos no contienen texto. Los títulos accesibles de los SVG no son letras visibles.</p></footer>
+</main>
+<script>
+  const candidates = [
+    { id: 'current', file: 'mark-current-copy.svg', title: '00 · Actual (copia intacta)', description: 'Placa horizontal, libro, líneas de lectura y nodos. Conserva las etiquetas BIBLIOTECA y material docente vivo para no alterar la referencia.' },
+    { id: 'blue', file: 'mark-blue.svg', title: '01 · Conservadora azul', description: 'Retiene el azul #2457C5 y las páginas curvas. Elimina la placa, los nodos y el texto incrustado. El lomo y dos líneas blancas ofrecen una lectura editorial; siguen siendo detalles frágiles a 16 px.' },
+    { id: 'teal', file: 'mark-teal.svg', title: '02 · Apertura verde petróleo', description: 'Dos masas de página, una abertura central y ningún detalle interior. Verde petróleo #087F78. Favorece la reducción y la tinta única, a cambio de una silueta más genérica.' }
+  ];
+  const modes = [
+    ['light', 'Color · fondo claro #FFFFFF'],
+    ['dark', 'Color · fondo oscuro #112A36'],
+    ['light gray', 'Monocromo tonal · fondo claro'],
+    ['dark gray', 'Monocromo tonal · fondo oscuro'],
+    ['light ink', 'Prueba de tinta plana negra · no es arte final']
+  ];
+  const sizes = [16, 24, 32, 48, 160];
+  const root = document.getElementById('comparisons');
+  for (const candidate of candidates) {
+    const section = document.createElement('section');
+    section.className = 'candidate';
+    section.id = candidate.id;
+    section.setAttribute('aria-labelledby', candidate.id + '-title');
+    const intro = document.createElement('div');
+    intro.className = 'intro';
+    const heading = document.createElement('h2');
+    heading.id = candidate.id + '-title';
+    heading.textContent = candidate.title;
+    const description = document.createElement('p');
+    description.textContent = candidate.description;
+    const lockup = document.createElement('div');
+    lockup.className = 'lockup';
+    const mark = document.createElement('img');
+    mark.src = candidate.file;
+    mark.alt = '';
+    mark.width = mark.height = 48;
+    const wordmark = document.createElement('span');
+    wordmark.className = 'wordmark';
+    wordmark.textContent = 'Libre Libros';
+    lockup.append(mark, wordmark);
+    intro.append(heading, description, lockup);
+    section.append(intro);
+    for (const [className, label] of modes) {
+      const row = document.createElement('div');
+      row.className = 'sample-row ' + className;
+      const title = document.createElement('h3');
+      title.textContent = label;
+      const samples = document.createElement('div');
+      samples.className = 'samples';
+      for (const size of sizes) {
+        const figure = document.createElement('figure');
+        const slot = document.createElement('div');
+        slot.className = 'slot';
+        const image = document.createElement('img');
+        image.src = candidate.file;
+        image.alt = '';
+        image.width = image.height = size;
+        image.style.width = image.style.height = size + 'px';
+        const caption = document.createElement('figcaption');
+        caption.textContent = size + ' px';
+        slot.append(image);
+        figure.append(slot, caption);
+        samples.append(figure);
+      }
+      row.append(title, samples);
+      section.append(row);
+    }
+    root.append(section);
+  }
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -7,7 +8,8 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import GlobalRole, User
-from app.security import hash_password, password_needs_rehash, verify_password
+from app.security import hash_password, password_needs_rehash, start_session, verify_password
+from app.services.invitations import normalize_email
 from app.templates import templates
 
 router = APIRouter(tags=["auth"])
@@ -103,7 +105,7 @@ def login(
     if settings.external_auth_only:
         return RedirectResponse("/login", status_code=303)
     user = db.query(User).filter(User.email == email.lower().strip()).first()
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not user.is_active or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
             name="auth/login.html",
             request=request,
@@ -122,12 +124,14 @@ def login(
     if password_needs_rehash(user.password_hash):
         user.password_hash = hash_password(password)
         db.commit()
-    request.session["user_id"] = user.id
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
 @router.get("/register")
 def register_page(request: Request):
+    if settings.invitation_only:
+        raise HTTPException(403, "El alta requiere una invitación. Abre el enlace recibido.")
     external = _first_external_start_url()
     if external:
         return RedirectResponse(external, status_code=303)
@@ -144,12 +148,14 @@ def register(
     email: str = Form(...),
     password: str = Form(...),
 ):
+    if settings.invitation_only:
+        raise HTTPException(403, "El alta requiere una invitación.")
     external = _first_external_start_url()
     if external:
         return RedirectResponse(external, status_code=303)
     if settings.external_auth_only:
         return RedirectResponse("/login", status_code=303)
-    normalized_email = email.lower().strip()
+    normalized_email = normalize_email(email)
     existing = db.query(User).filter(User.email == normalized_email).first()
     if existing:
         return templates.TemplateResponse(
@@ -166,8 +172,12 @@ def register(
         auth_provider="local",
     )
     db.add(user)
-    db.commit()
-    request.session["user_id"] = user.id
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "La cuenta ya existe.") from exc
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
@@ -177,34 +187,36 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=303)
 
 
-@router.get("/logout")
-def logout_get(request: Request):
-    request.session.clear()
-    return RedirectResponse("/login", status_code=303)
+def _upsert_oidc_user(db: Session, email: str, name: str, provider: str,
+                      subject: str | None = None, email_verified: bool = False) -> User:
+    from app.models import ExternalIdentity
 
-
-def _upsert_oidc_user(db: Session, email: str, name: str, provider: str) -> User:
-    normalized_email = email.lower().strip()
-    user = db.query(User).filter(User.email == normalized_email).first()
-    if not user:
-        user = User(
-            email=normalized_email,
-            full_name=name or normalized_email.split("@")[0],
-            auth_provider=provider,
-            global_role=GlobalRole.admin if settings.init_admin_email and normalized_email == settings.init_admin_email.lower().strip() else GlobalRole.editor,
-        )
+    if email_verified is not True or not subject:
+        raise HTTPException(403, "El proveedor debe verificar el correo y la identidad.")
+    normalized_email = normalize_email(email)
+    identity = db.query(ExternalIdentity).filter_by(provider=provider, subject=subject).first()
+    if identity:
+        user = db.get(User, identity.user_id)
+        if not user or not user.is_active:
+            raise HTTPException(403, "Cuenta no disponible.")
+        return user
+    # Nunca vincular por email ni promover administradores desde callbacks.
+    if settings.invitation_only or db.query(User).filter(User.email == normalized_email).first():
+        raise HTTPException(403, "Identidad no vinculada. Contacta con administración.")
+    user = User(email=normalized_email, full_name=name or normalized_email.split("@")[0],
+                auth_provider=provider.split(":", 1)[0], global_role=GlobalRole.editor)
+    try:
         db.add(user)
+        db.flush()
+        db.add(ExternalIdentity(user_id=user.id, provider=provider, subject=subject))
         db.commit()
-        db.refresh(user)
-    elif settings.init_admin_email and normalized_email == settings.init_admin_email.lower().strip() and user.global_role != GlobalRole.admin:
-        user.global_role = GlobalRole.admin
-        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "La identidad ya está registrada.") from exc
     return user
 
 
 def _github_email(user_info: dict, emails: list[dict]) -> str | None:
-    if user_info.get("email"):
-        return user_info["email"]
     primary_verified = [
         email["email"]
         for email in emails
@@ -236,8 +248,9 @@ async def github_callback(request: Request, db: Session = Depends(get_db)):
     if not email:
         return RedirectResponse("/login", status_code=303)
     name = user_info.get("name") or user_info.get("login") or ""
-    user = _upsert_oidc_user(db, email, name, "github")
-    request.session["user_id"] = user.id
+    user = _upsert_oidc_user(db, email, name, "github:https://github.com",
+                             str(user_info["id"]) if user_info.get("id") else None, True)
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
@@ -253,8 +266,10 @@ async def google_start(request: Request):
 async def google_callback(request: Request, db: Session = Depends(get_db)):
     token = await oauth.google.authorize_access_token(request)
     user_info = token.get("userinfo") or await oauth.google.parse_id_token(request, token)
-    user = _upsert_oidc_user(db, user_info["email"], user_info.get("name", ""), "google")
-    request.session["user_id"] = user.id
+    user = _upsert_oidc_user(db, user_info.get("email", ""), user_info.get("name", ""),
+                             "google:" + settings.google_server_metadata_url,
+                             user_info.get("sub"), user_info.get("email_verified") is True)
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
@@ -270,8 +285,10 @@ async def oidc_start(request: Request):
 async def oidc_callback(request: Request, db: Session = Depends(get_db)):
     token = await oauth.oidc.authorize_access_token(request)
     user_info = token.get("userinfo") or await oauth.oidc.parse_id_token(request, token)
-    user = _upsert_oidc_user(db, user_info["email"], user_info.get("name", ""), "oidc")
-    request.session["user_id"] = user.id
+    user = _upsert_oidc_user(db, user_info.get("email", ""), user_info.get("name", ""),
+                             "oidc:" + (settings.generic_oidc_server_metadata_url or ""),
+                             user_info.get("sub"), user_info.get("email_verified") is True)
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
@@ -288,9 +305,13 @@ async def gitlab_callback(request: Request, db: Session = Depends(get_db)):
     token = await oauth.gitlab.authorize_access_token(request)
     response = await oauth.gitlab.get("user", token=token)
     user_info = response.json()
-    email = user_info.get("email") or user_info.get("public_email")
+    # REST public_email is not proof of verification. Fail closed unless the
+    # configured provider explicitly supplies a verified-email claim.
+    email = user_info.get("email") if user_info.get("email_verified") is True else None
     if not email:
         return RedirectResponse("/login", status_code=303)
-    user = _upsert_oidc_user(db, email, user_info.get("name", user_info.get("username", "")), "gitlab")
-    request.session["user_id"] = user.id
+    user = _upsert_oidc_user(db, email, user_info.get("name", user_info.get("username", "")),
+                             "gitlab:" + (settings.gitlab_url or "").rstrip("/"),
+                             str(user_info["id"]) if user_info.get("id") else None, True)
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)

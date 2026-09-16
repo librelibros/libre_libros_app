@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% set title = "Administración" %}
 {% block content %}
+<a class="button" href="/admin/invitations">Invitar docentes</a>
 <section class="grid three admin-grid">
   {% if not external_auth_only %}
   <article class="card stack">
@@ -11,6 +12,7 @@
       </div>
     </div>
     <form method="post" action="/admin/users" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <label>
         Nombre
         <input type="text" name="full_name" required />
@@ -76,6 +78,7 @@
       </div>
     </div>
     <form method="post" action="/admin/organizations" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <label>
         Nombre
         <input type="text" name="name" required />
@@ -87,6 +90,7 @@
       <button class="button" type="submit">Crear organización</button>
     </form>
     <form method="post" action="/admin/memberships" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <label>
         Usuario
         <select name="user_id">
@@ -134,6 +138,7 @@
       </div>
     </div>
     <form method="post" action="/admin/repositories" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <label>
         Nombre
         <input type="text" name="name" required />

@@ -37,7 +37,8 @@ async function refreshPreview(form) {
   const branchName = form.querySelector("[data-editor-branch]")?.value;
   if (bookId) body.append("book_id", bookId);
   if (branchName) body.append("branch_name", branchName);
-  const response = await fetch("/books/preview", { method: "POST", body });
+  const response = await fetch("/books/preview", window.LibreLibrosCSRF.options("/books/preview", { method: "POST", body }));
+  if (!response.ok) throw new Error(`No se pudo previsualizar: HTTP ${response.status}`);
   preview.innerHTML = await response.text();
   initializeBookDocuments(preview);
   hydrateDraftAssetsInPreview(form);

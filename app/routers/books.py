@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+from io import BytesIO
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
+
+from PIL import Image, UnidentifiedImageError
+from sqlalchemy.exc import IntegrityError
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
@@ -22,6 +26,7 @@ from app.services.permissions import (
     approved_branch_name,
     available_branches_for_book,
     can_edit_book_on_branch,
+    can_create_book_in_repository,
     can_manage_organization_version,
     can_view_book,
     course_branch_slug,
@@ -31,7 +36,7 @@ from app.services.permissions import (
     user_workspace_branch_name,
 )
 from app.services.repository.factory import repository_client_for
-from app.services.repository.base import RepositoryFileWrite
+from app.services.repository.base import RepositoryFileWrite, validate_repository_path
 from app.templates import templates
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -96,6 +101,8 @@ def _friendly_github_error(exc: httpx.HTTPStatusError, *, action: str) -> str:
 
 def _preferred_personal_branch(repo, user: User, organization_slug: str | None, course_name: str) -> str:
     preferred_branch = user_workspace_branch_name(user, organization_slug, course_name)
+    # Only stable-ID prefixes can be selected for editing. Legacy name-based
+    # branches remain explicitly readable but require an ownership map to migrate.
     legacy_branch = user_branch_name(user)
     try:
         existing_branches = set(repo.list_branches())
@@ -235,12 +242,11 @@ async def _prepare_asset_writes(
     for asset in files or []:
         if not asset.filename:
             continue
-        data = await asset.read()
+        data = await asset.read(max(settings.max_image_bytes, settings.max_audio_bytes) + 1)
         if not data:
             continue
-        content_type = asset.content_type or mimetypes.guess_type(asset.filename)[0] or ""
-        _validate_asset_upload(data, content_type)
-        filename = sanitize_filename(asset.filename)
+        data, extension = _validate_asset_upload(data, asset.content_type or "")
+        filename = (slugify(Path(asset.filename).stem) or "recurso") + extension
         writes.append(
             RepositoryFileWrite(
                 rel_path=f"{book.assets_path}/{filename}",
@@ -252,16 +258,39 @@ async def _prepare_asset_writes(
     return writes, uploaded_filenames
 
 
-def _validate_asset_upload(data: bytes, content_type: str) -> None:
-    if content_type.startswith("image/"):
-        if len(data) > settings.max_image_bytes:
-            raise HTTPException(status_code=400, detail="Image exceeds size limit")
-        return
+def _raster_png(data: bytes) -> bytes:
+    """Decode allowlisted raster formats and discard metadata/embedded content."""
+    with Image.open(BytesIO(data)) as image:
+        if image.format not in {"PNG", "JPEG", "GIF", "WEBP"} or image.width * image.height > 16_000_000:
+            raise ValueError("Formato o dimensiones no admitidos")
+        image.verify()
+    with Image.open(BytesIO(data)) as image:
+        image.load()
+        normalized = image.convert("RGBA")
+        output = BytesIO()
+        normalized.save(output, format="PNG")
+        return output.getvalue()
+
+
+def _validate_asset_upload(data: bytes, content_type: str) -> tuple[bytes, str]:
     if content_type == "audio/mpeg":
-        if len(data) > settings.max_audio_bytes:
-            raise HTTPException(status_code=400, detail="Audio exceeds size limit")
-        return
-    raise HTTPException(status_code=400, detail="Only images and short mp3 files are allowed")
+        if len(data) > settings.max_audio_bytes or not (data.startswith(b"ID3") or data[:2] in {b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"}):
+            raise HTTPException(status_code=400, detail="Audio no válido o demasiado grande")
+        return data, ".mp3"
+    if len(data) > settings.max_image_bytes:
+        raise HTTPException(status_code=400, detail="La imagen supera el límite de tamaño")
+    try:
+        return _raster_png(data), ".png"
+    except (ValueError, OSError, SyntaxError, UnidentifiedImageError, Image.DecompressionBombError):
+        raise HTTPException(status_code=400, detail="Sube una imagen PNG, JPEG, GIF o WebP válida; SVG no está admitido") from None
+
+
+def _book_asset_path(book: Book, asset_path: str) -> str:
+    # Validate before concatenation: confinement is to this book's assets,
+    # not merely to the repository. Do not resolve/normalize away '..'.
+    validate_repository_path(book.assets_path)
+    validate_repository_path(asset_path)
+    return f"{book.assets_path}/{asset_path}"
 
 
 def _pdf_asset_loader(book: Book, repo, branch_name: str):
@@ -269,7 +298,11 @@ def _pdf_asset_loader(book: Book, repo, branch_name: str):
         rel_path = markdown_path.removeprefix("./")
         if not rel_path.startswith("assets/"):
             return b""
-        return repo.read_binary(f"{book.assets_path}/{rel_path.removeprefix('assets/')}", branch_name)
+        try:
+            asset_path = _book_asset_path(book, rel_path.removeprefix("assets/"))
+        except ValueError:
+            return b""
+        return repo.read_binary(asset_path, branch_name)
 
     return load
 
@@ -383,7 +416,7 @@ def _resolve_version_context(
     if user:
         if selected_workspace == WORKSPACE_PERSONAL and personal_branch and can_edit_book_on_branch(db, user, book, personal_branch):
             edit_branch = personal_branch
-        elif selected_school_slug and can_manage_organization_version(db, user, selected_school_slug):
+        elif selected_school_slug and can_edit_book_on_branch(db, user, book, approved_branch):
             edit_branch = approved_branch
         elif personal_branch and can_edit_book_on_branch(db, user, book, personal_branch):
             edit_branch = personal_branch
@@ -489,9 +522,7 @@ def new_book_page(
     organizations = [membership.organization for membership in user.memberships]
     repository_sources = db.query(RepositorySource).order_by(RepositorySource.name).all()
     if user.global_role != GlobalRole.admin:
-        repository_sources = [
-            source for source in repository_sources if source.organization_id is None or source.organization_id in {org.id for org in organizations}
-        ]
+        repository_sources = [source for source in repository_sources if can_create_book_in_repository(user, source)]
     return templates.TemplateResponse(
         name="books/form.html",
         request=request,
@@ -523,15 +554,17 @@ def create_book(
     repo_source = db.get(RepositorySource, repository_source_id)
     if not repo_source:
         raise HTTPException(status_code=404, detail="Repository source not found")
+    if not can_create_book_in_repository(user, repo_source):
+        raise HTTPException(status_code=403, detail="No puedes crear libros en este repositorio")
+    if organization_id is not None and organization_id != repo_source.organization_id:
+        raise HTTPException(status_code=400, detail="El repositorio no pertenece a la organización seleccionada")
+    organization_id = repo_source.organization_id
+    if not slug or not slugify(course) or not slugify(subject):
+        raise HTTPException(status_code=400, detail="Completa título, curso y materia")
+    if db.query(Book).filter(Book.repository_source_id == repo_source.id, Book.content_path == content_path).first():
+        raise HTTPException(status_code=409, detail="Ya existe un libro en esa ruta")
     if organization_id:
         organization = db.get(Organization, organization_id)
-        if not organization:
-            raise HTTPException(status_code=404, detail="Organization not found")
-        is_org_member = any(m.organization_id == organization_id for m in user.memberships)
-        if user.global_role != GlobalRole.admin and not is_org_member:
-            raise HTTPException(status_code=403, detail="Organization access required")
-        if repo_source.organization_id and repo_source.organization_id != organization_id:
-            raise HTTPException(status_code=400, detail="Repository source does not belong to the selected organization")
     book = Book(
         title=title.strip(),
         slug=slug,
@@ -546,19 +579,31 @@ def create_book(
         content_path=content_path,
         assets_path=assets_path,
     )
-    db.add(book)
-    db.commit()
-
     repo = repository_client_for(repo_source)
+    if content_path in repo.list_files(_book_directory(book), book.base_branch):
+        raise HTTPException(status_code=409, detail="Ya existe contenido en esa ruta del repositorio")
     initial_content = f"# {book.title}\n\n## Objetivo\n\nDescribe aquí el objetivo del libro.\n\n## Contenido\n\nEmpieza a redactar.\n"
-    repo.write_text(
-        rel_path=book.content_path,
-        branch_name=book.base_branch,
-        content=initial_content,
-        commit_message=f"Create base book {book.title}",
-        author_name=user.full_name,
-        author_email=user.email,
-    )
+    try:
+        db.add(book)
+        # The central model migration owns the UNIQUE(repo, path) constraint.
+        # Flush before Git so concurrent duplicate requests fail before writes.
+        db.flush()
+        repo.write_text(
+            rel_path=book.content_path,
+            branch_name=book.base_branch,
+            content=initial_content,
+            commit_message=f"Create base book {book.title}",
+            author_name=user.full_name,
+            author_email=user.email,
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Ya existe un libro en esa ruta") from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="No se pudo crear el libro. Inténtalo de nuevo") from None
+    db.refresh(book)
     return _redirect_with_message(f"/books/{book.id}", "Libro creado correctamente.")
 
 
@@ -590,8 +635,11 @@ def book_detail(
     repo = repository_client_for(book.repository_source)
     version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
     selected_branch = version_context["selected_branch"]
-    repo.ensure_branch(selected_branch, book.base_branch)
-    content = repo.read_text(book.content_path, selected_branch)
+    version_pending = selected_branch not in repo.list_branches()
+    if version_pending and branch is not None:
+        raise HTTPException(status_code=404, detail="La versión solicitada no existe")
+    read_branch = book.base_branch if version_pending else selected_branch
+    content = repo.read_text(book.content_path, read_branch)
     edit_branch = version_context["edit_branch"]
     proposal_head_branch = version_context["personal_branch"] if user else None
     proposal_base_branch = version_context["approved_branch"] if version_context["selected_school_slug"] else book.base_branch
@@ -604,8 +652,10 @@ def book_detail(
             "book": book,
             "selected_branch": selected_branch,
             "content": content,
-            "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
-            "worksheet_entries": _worksheet_entries(book, selected_branch),
+            "document": build_book_document(content, book_id=book.id, branch_name=read_branch),
+            "worksheet_entries": _worksheet_entries(book, read_branch),
+            "read_branch": read_branch,
+            "version_pending": version_pending,
             "edit_branch": edit_branch,
             "version_context": version_context,
             "proposal_head_branch": proposal_head_branch,
@@ -651,14 +701,16 @@ def edit_book_page(
     book = db.query(Book).options(joinedload(Book.organization), joinedload(Book.repository_source)).filter(Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    if branch and parse_branch_context(branch).is_personal and not can_edit_book_on_branch(db, user, book, branch):
+        raise HTTPException(status_code=403, detail="No puedes editar esa versión personal")
     version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
-    selected_branch = version_context["edit_branch"]
+    selected_branch = branch if branch and can_edit_book_on_branch(db, user, book, branch) else version_context["edit_branch"]
     if not selected_branch:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable versions available")
 
     repo = repository_client_for(book.repository_source)
-    repo.ensure_branch(selected_branch, book.base_branch)
-    content = repo.read_text(book.content_path, selected_branch) or repo.read_text(book.content_path, book.base_branch)
+    read_branch = selected_branch if selected_branch in repo.list_branches() else book.base_branch
+    content = repo.read_text(book.content_path, read_branch)
     return templates.TemplateResponse(
         name="books/editor.html",
         request=request,
@@ -672,10 +724,10 @@ def edit_book_page(
             "save_action": f"/books/{book.id}/edit",
             "cancel_href": f"/books/{book.id}?branch={selected_branch}",
             "resource_kind_label": "Libro",
-            "preview_document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "preview_document": build_book_document(content, book_id=book.id, branch_name=read_branch),
             "pagebreak_marker": PAGEBREAK_MARKER,
-            "asset_entries": _asset_entries(book, selected_branch),
-            "worksheet_entries": _worksheet_entries(book, selected_branch),
+            "asset_entries": _asset_entries(book, read_branch),
+            "worksheet_entries": _worksheet_entries(book, read_branch),
             "version_context": version_context,
             "message": _message_from_request(request),
         },
@@ -793,11 +845,11 @@ def worksheet_detail(
     repo = repository_client_for(book.repository_source)
     version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
     selected_branch = version_context["selected_branch"]
-    repo.ensure_branch(selected_branch, book.base_branch)
-    content = repo.read_text(_worksheet_rel_path(book, worksheet_slug), selected_branch) or repo.read_text(
-        _worksheet_rel_path(book, worksheet_slug),
-        book.base_branch,
-    )
+    version_pending = selected_branch not in repo.list_branches()
+    if version_pending and branch is not None:
+        raise HTTPException(status_code=404, detail="La versión solicitada no existe")
+    read_branch = book.base_branch if version_pending else selected_branch
+    content = repo.read_text(_worksheet_rel_path(book, worksheet_slug), read_branch)
     if not content:
         raise HTTPException(status_code=404, detail="Worksheet not found")
     edit_branch = version_context["edit_branch"]
@@ -812,7 +864,8 @@ def worksheet_detail(
             "worksheet_title": worksheet_title,
             "worksheet_summary": _extract_document_summary(content),
             "selected_branch": selected_branch,
-            "document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "version_pending": version_pending,
+            "document": build_book_document(content, book_id=book.id, branch_name=read_branch),
             "edit_branch": edit_branch,
             "version_context": version_context,
             "message": _message_from_request(request),
@@ -835,15 +888,17 @@ def edit_worksheet_page(
     book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    if branch and parse_branch_context(branch).is_personal and not can_edit_book_on_branch(db, user, book, branch):
+        raise HTTPException(status_code=403, detail="No puedes editar esa versión personal")
     version_context = _resolve_version_context(db, user, book, school, course_version, workspace, branch)
-    selected_branch = version_context["edit_branch"]
+    selected_branch = branch if branch and can_edit_book_on_branch(db, user, book, branch) else version_context["edit_branch"]
     if not selected_branch:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No editable versions available")
 
     repo = repository_client_for(book.repository_source)
-    repo.ensure_branch(selected_branch, book.base_branch)
     rel_path = _worksheet_rel_path(book, worksheet_slug)
-    content = repo.read_text(rel_path, selected_branch) or repo.read_text(rel_path, book.base_branch)
+    read_branch = selected_branch if selected_branch in repo.list_branches() else book.base_branch
+    content = repo.read_text(rel_path, read_branch)
     if not content:
         raise HTTPException(status_code=404, detail="Worksheet not found")
     worksheet_title = _extract_document_title(content, worksheet_slug.replace("-", " ").title())
@@ -860,10 +915,10 @@ def edit_worksheet_page(
             "save_action": f"/books/{book.id}/worksheets/{worksheet_slug}/edit",
             "cancel_href": f"/books/{book.id}/worksheets/{worksheet_slug}?branch={selected_branch}",
             "resource_kind_label": "Ficha",
-            "preview_document": build_book_document(content, book_id=book.id, branch_name=selected_branch),
+            "preview_document": build_book_document(content, book_id=book.id, branch_name=read_branch),
             "pagebreak_marker": PAGEBREAK_MARKER,
-            "asset_entries": _asset_entries(book, selected_branch),
-            "worksheet_entries": _worksheet_entries(book, selected_branch),
+            "asset_entries": _asset_entries(book, read_branch),
+            "worksheet_entries": _worksheet_entries(book, read_branch),
             "version_context": version_context,
             "message": _message_from_request(request),
         },
@@ -1065,14 +1120,21 @@ def approve_book_version(
     target_branch: str = Form(...),
 ):
     book = db.query(Book).options(joinedload(Book.repository_source)).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
+    if not book or not can_view_book(user, book):
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
     target_context = parse_branch_context(target_branch)
-    if not target_context.organization_slug or not can_manage_organization_version(db, user, target_context.organization_slug):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Approval not allowed")
+    organization = organization_for_slug(db, target_context.organization_slug)
+    if (target_context.is_personal or not organization or not target_context.course_slug
+            or target_branch != approved_branch_name(organization.slug, target_context.course_slug)
+            or not can_manage_organization_version(db, user, organization.slug)
+            or (book.repository_source.organization_id and book.repository_source.organization_id != organization.id)):
+        raise HTTPException(status_code=403, detail="No puedes aprobar esta versión")
 
     repo = repository_client_for(book.repository_source)
-    repo.ensure_branch(source_branch, book.base_branch)
+    if source_branch not in repo.list_branches() or not repo.read_text(book.content_path, source_branch):
+        raise HTTPException(status_code=404, detail="La versión de origen no existe")
+    if source_branch == target_branch:
+        raise HTTPException(status_code=400, detail="Selecciona una versión de origen diferente")
     repo.ensure_branch(target_branch, book.base_branch)
     target_paths = _book_related_paths(book, repo, target_branch)
     source_paths = _book_related_paths(book, repo, source_branch)
@@ -1127,12 +1189,11 @@ async def upload_asset(
     if not book or not can_edit_book_on_branch(db, user, book, branch_name):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Upload not allowed")
 
-    data = await asset.read()
-    content_type = asset.content_type or ""
-    _validate_asset_upload(data, content_type)
+    data = await asset.read(max(settings.max_image_bytes, settings.max_audio_bytes) + 1)
+    data, extension = _validate_asset_upload(data, asset.content_type or "")
 
     repo = repository_client_for(book.repository_source)
-    filename = sanitize_filename(asset.filename or "asset")
+    filename = (slugify(Path(asset.filename or "recurso").stem) or "recurso") + extension
     rel_path = f"{book.assets_path}/{filename}"
     repo.write_binary(
         rel_path=rel_path,
@@ -1172,15 +1233,27 @@ def serve_book_asset(
     if not book or not can_view_book(user, book):
         raise HTTPException(status_code=404, detail="Book not found")
 
+    try:
+        rel_path = _book_asset_path(book, asset_path)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Recurso no encontrado") from None
     repo = repository_client_for(book.repository_source)
     selected_branch = branch or book.base_branch
-    rel_path = f"{book.assets_path}/{asset_path}"
     asset_bytes = repo.read_binary(rel_path, selected_branch)
     if not asset_bytes:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    media_type = mimetypes.guess_type(asset_path)[0] or "application/octet-stream"
-    return Response(content=asset_bytes, media_type=media_type)
+    headers = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "sandbox; default-src 'none'"}
+    try:
+        if len(asset_bytes) > settings.max_image_bytes:
+            raise ValueError("Recurso demasiado grande")
+        image_bytes = _raster_png(asset_bytes)
+    except (ValueError, OSError, SyntaxError, UnidentifiedImageError, Image.DecompressionBombError):
+        # Legacy SVG/HTML and all unknown formats are downloads, never same-
+        # origin documents. Do not trust their filename or declared MIME type.
+        headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(Path(asset_path).name, safe="")
+        return Response(content=asset_bytes, media_type="application/octet-stream", headers=headers)
+    return Response(content=image_bytes, media_type="image/png", headers=headers)
 
 
 @router.get("/{book_id}/export/pdf")
@@ -1196,11 +1269,16 @@ def export_pdf(
     repo = repository_client_for(book.repository_source)
     selected_branch = branch or book.base_branch
     content = repo.read_text(book.content_path, selected_branch)
-    pdf_bytes = export_markdown_to_pdf(
-        book,
-        content,
-        asset_loader=_pdf_asset_loader(book, repo, selected_branch),
-    )
+    from app.services.pdf_export import PDFExportError
+
+    try:
+        pdf_bytes = export_markdown_to_pdf(
+            book,
+            content,
+            asset_loader=_pdf_asset_loader(book, repo, selected_branch),
+        )
+    except PDFExportError:
+        raise HTTPException(status_code=400, detail="No se pudo exportar el PDF. Reduce el tamaño o simplifica el documento e inténtalo de nuevo.") from None
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

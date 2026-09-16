@@ -1,0 +1,55 @@
+{
+  "svg": [
+    {
+      "file": "mark-current-copy.svg",
+      "xml": "pass",
+      "sha256": "416118b32976c7b7855316c97df3f087117b616d0ee43689d65f745c3a7c6d32"
+    },
+    {
+      "file": "mark-blue.svg",
+      "xml": "pass",
+      "sha256": "408f0769c7f5cf21775208d44a16c1790cdf0b0f62b9b71d5e14e6cf8f421a58"
+    },
+    {
+      "file": "mark-teal.svg",
+      "xml": "pass",
+      "sha256": "81b177b1530f3c6a8f45e6a7a9a82e868ac63b76db079e6a192f134546194e25"
+    }
+  ],
+  "reference_byte_identical": true,
+  "browser": [
+    {
+      "viewport": [
+        1440,
+        1000
+      ],
+      "device_scale_factor": 1,
+      "images": 78,
+      "rows": 15,
+      "samples": 75,
+      "exactSizes": true,
+      "decorativeAlts": true,
+      "visibleNames": 3,
+      "overflow": false,
+      "page_errors": [],
+      "external_requests": []
+    },
+    {
+      "viewport": [
+        390,
+        844
+      ],
+      "device_scale_factor": 1,
+      "images": 78,
+      "rows": 15,
+      "samples": 75,
+      "exactSizes": true,
+      "decorativeAlts": true,
+      "visibleNames": 3,
+      "overflow": false,
+      "page_errors": [],
+      "external_requests": []
+    }
+  ],
+  "chromium_version": "139.0.7258.5"
+}

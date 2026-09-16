@@ -5,7 +5,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from app.services.repository.base import RepositoryClient, RepositoryFileWrite
+from app.services.repository.base import RepositoryClient, RepositoryFileWrite, validate_repository_path
 
 try:  # pragma: no cover - Windows fallback is exercised by import path only
     import fcntl
@@ -97,45 +97,61 @@ class LocalGitRepositoryClient(RepositoryClient):
     def _checkout(self, branch_name: str) -> None:
         self._run("checkout", branch_name)
 
-    def read_text(self, rel_path: str, branch_name: str) -> str:
+    def _read_commit(self, branch_name: str) -> str:
+        # Resolve a branch (or immutable commit ID), never a user-supplied Git
+        # revision expression or command option. Reads do not touch the checkout.
+        if len(branch_name) == 40 and all(char in "0123456789abcdef" for char in branch_name):
+            ref = branch_name
+        else:
+            ref = f"refs/heads/{branch_name}"
+            self._run("check-ref-format", ref)
+        return self._run("rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}")
+
+    def _read_tree(self, rel_path: str, branch_name: str) -> list[tuple[str, str]]:
         try:
-            return self._run("show", f"{branch_name}:{rel_path}")
-        except RuntimeError:
-            target = self.repo_path / rel_path
-            if target.exists():
-                return target.read_text(encoding="utf-8")
-            return ""
+            validate_repository_path(rel_path)
+            commit = self._read_commit(branch_name)
+            output = self._run("ls-tree", "-r", "-z", commit, "--", f":(literal){rel_path}")
+        except (ValueError, RuntimeError):
+            return []
+        entries = []
+        for entry in output.split("\0"):
+            if not entry:
+                continue
+            metadata, path = entry.split("\t", 1)
+            mode, kind, sha = metadata.split()
+            # Symlinks (120000) and submodules are not readable assets. Git's
+            # tree walk never follows directory symlinks, including cross-book.
+            if kind != "blob" or mode not in {"100644", "100755"}:
+                continue
+            if path != rel_path and not path.startswith(f"{rel_path}/"):
+                continue
+            try:
+                validate_repository_path(path)
+            except ValueError:
+                continue
+            entries.append((path, sha))
+        return entries
+
+    def read_text(self, rel_path: str, branch_name: str) -> str:
+        return self.read_binary(rel_path, branch_name).decode("utf-8")
 
     def read_binary(self, rel_path: str, branch_name: str) -> bytes:
-        try:
+        for path, sha in self._read_tree(rel_path, branch_name):
+            if path != rel_path:
+                continue
             completed = subprocess.run(
-                ["git", "show", f"{branch_name}:{rel_path}"],
+                ["git", "cat-file", "blob", sha],
                 cwd=self.repo_path,
                 capture_output=True,
                 check=False,
             )
             if completed.returncode == 0:
                 return completed.stdout
-        except FileNotFoundError:
-            pass
-
-        target = self.repo_path / rel_path
-        if target.exists():
-            return target.read_bytes()
         return b""
 
     def list_files(self, rel_path: str, branch_name: str) -> list[str]:
-        try:
-            output = self._run("ls-tree", "-r", "--name-only", branch_name, rel_path)
-            files = [line.strip() for line in output.splitlines() if line.strip()]
-            if files:
-                return files
-        except RuntimeError:
-            pass
-        target = self.repo_path / rel_path
-        if not target.exists():
-            return []
-        return [item.relative_to(self.repo_path).as_posix() for item in target.rglob("*") if item.is_file()]
+        return [path for path, _ in self._read_tree(rel_path, branch_name)]
 
     def write_files(
         self,

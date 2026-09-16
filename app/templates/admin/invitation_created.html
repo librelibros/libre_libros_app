@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% set title = "Invitación creada" %}
+{% block content %}
+<section class="card stack">
+  <h1>Invitación creada</h1>
+  <p>Entrega este enlace exclusivamente a {{ invitation.email_normalized }}. Se muestra una sola vez; no lo publiques ni lo compartas en grupos.</p>
+  <label>Enlace privado<input readonly value="{{ invitation_url }}" /></label>
+  <p>Caduca: {{ invitation.expires_at }} UTC.</p>
+  <a class="button" href="/admin/invitations">Volver a invitaciones</a>
+</section>
+{% endblock %}

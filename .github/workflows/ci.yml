@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: libre_libros_app
+    env:
+      LIBRE_LIBROS_ENV_FILE: ""
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: libre_libros_app
+          persist-credentials: false
+      # Tests use a sibling content fixture. Never push or persist credentials.
+      - uses: actions/checkout@v4
+        with:
+          repository: librelibros/libre_libros_content
+          ref: main
+          path: libre_libros_content
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: libre_libros_app/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.13'
+          cache: pip
+          cache-dependency-path: libre_libros_app/requirements.txt
+      - name: Build editor from locked dependencies
+        run: |
+          npm ci
+          node scripts/build-editor.mjs
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements.txt
+      # conftest clears owner environment, disables dotenv and isolates SQLite/repos.
+      - name: Hermetic test suite (including production configuration/startup)
+        run: python -m pytest tests -q -p no:cacheprovider
+      - name: Build production image without publishing
+        run: docker build --tag libre-libros:ci .

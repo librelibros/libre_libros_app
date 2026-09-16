@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set title = "Invitaciones" %}
+{% block content %}
+<section class="card stack">
+  <h1>Invitar docentes</h1>
+  <p>El enlace es personal y de un solo uso. Entrégalo en privado al correo indicado. Reemitir revoca la invitación anterior para ese centro.</p>
+  <form method="post" action="/admin/invitations" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
+    <label>Correo<input type="email" name="email" required /></label>
+    <label>Organización<select name="organization_id" required>
+      {% for organization in organizations %}<option value="{{ organization.id }}">{{ organization.name }}</option>{% endfor %}
+    </select></label>
+    <p>Rol: docente editor.</p>
+    <button class="button" type="submit">Crear invitación</button>
+  </form>
+  {% for invitation in invitations %}
+  <article class="comment">
+    <strong>{{ invitation.email_normalized }}</strong>
+    <p>Caduca: {{ invitation.expires_at }} UTC · {% if invitation.used_at %}Aceptada{% elif invitation.revoked_at %}Revocada{% else %}Pendiente{% endif %}</p>
+    {% if not invitation.used_at and not invitation.revoked_at %}
+    <form method="post" action="/admin/invitations/{{ invitation.id }}/revoke">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
+      <button type="submit" class="button button-tonal">Revocar</button>
+    </form>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}

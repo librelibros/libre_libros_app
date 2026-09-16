@@ -1,6 +1,50 @@
 {% extends "base.html" %}
 {% set title = "Panel" %}
 {% block content %}
+<nav class="chip-group" aria-label="Accesos del panel">
+  <a href="/books">Filtrar libros por curso y materia</a>
+  <a href="#reviews-banner-title">Avisos y propuestas{% if open_reviews_count %} ({{ open_reviews_count }} pendientes){% endif %}</a>
+</nav>
+<section class="card stack" aria-labelledby="catalog-title">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Catálogo</p>
+      <h2 id="catalog-title">Libros por curso y materia</h2>
+    </div>
+    <a class="button" href="/books/new">Crear libro</a>
+  </div>
+  {% if grouped_books %}
+    {% for course, subjects in grouped_books.items() %}
+    <div class="stack compact">
+      <h3>{{ course }}</h3>
+      {% for subject, books in subjects.items() %}
+      <div class="subsection">
+        <h4>{{ subject }}</h4>
+        <div class="grid catalog-grid">
+          {% for book in books %}
+          <a class="card book-card" href="/books/{{ book.id }}">
+            <img class="book-cover"
+                 src="/books/{{ book.id }}/assets/cover.svg"
+                 alt="Portada de {{ book.title }} ({{ book.subject }}, {{ book.course }})"
+                 loading="lazy"
+                 data-fallback="hide" />
+            <div class="chip-group">
+              <span class="chip">{{ book.visibility.value }}</span>
+              <span class="chip">{{ book.repository_source.provider.value }}</span>
+            </div>
+            <h5>{{ book.title }}</h5>
+            <p class="muted">{{ book.summary or "Sin resumen todavía." }}</p>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Todavía no hay libros accesibles. Crea el primero desde este panel.</p>
+  {% endif %}
+</section>
 <section class="card stack reviews-banner" aria-labelledby="reviews-banner-title">
   <div class="section-header">
     <div class="reviews-banner-head">
@@ -110,7 +154,7 @@
   </p>
   <ol class="welcome-steps">
     <li>
-      <strong>Mira el catálogo de abajo.</strong> Verás los libros agrupados por
+      <strong><a href="#catalog-title">Abre el catálogo al principio del panel.</a></strong> Verás los libros agrupados por
       <em>curso</em> (Infantil, Primaria, Secundaria) y <em>materia</em>. Pulsa
       cualquier libro para abrirlo y leerlo.
     </li>
@@ -162,46 +206,5 @@
   </div>
 </section>
 {% endif %}
-
-<section class="card stack">
-  <div class="section-header">
-    <div>
-      <p class="eyebrow">Catálogo</p>
-      <h2>Libros por curso y materia</h2>
-    </div>
-    <a class="button" href="/books/new">Crear libro</a>
-  </div>
-  {% if grouped_books %}
-    {% for course, subjects in grouped_books.items() %}
-    <div class="stack compact">
-      <h3>{{ course }}</h3>
-      {% for subject, books in subjects.items() %}
-      <div class="subsection">
-        <h4>{{ subject }}</h4>
-        <div class="grid catalog-grid">
-          {% for book in books %}
-          <a class="card book-card" href="/books/{{ book.id }}">
-            <img class="book-cover"
-                 src="/books/{{ book.id }}/assets/cover.svg"
-                 alt="Portada de {{ book.title }} ({{ book.subject }}, {{ book.course }})"
-                 loading="lazy"
-                 data-fallback="hide" />
-            <div class="chip-group">
-              <span class="chip">{{ book.visibility.value }}</span>
-              <span class="chip">{{ book.repository_source.provider.value }}</span>
-            </div>
-            <h5>{{ book.title }}</h5>
-            <p class="muted">{{ book.summary or "Sin resumen todavía." }}</p>
-          </a>
-          {% endfor %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endfor %}
-  {% else %}
-  <p class="muted">Todavía no hay libros accesibles. Crea el primero desde este panel.</p>
-  {% endif %}
-</section>
 
 {% endblock %}

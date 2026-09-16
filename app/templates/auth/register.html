@@ -10,11 +10,12 @@
     <section class="auth-card">
       <p class="eyebrow">Alta local</p>
       <h1>Crear usuario local</h1>
-      <p class="muted">Este formulario solo se usa en desarrollo o administración interna. En producción, el alta se realiza con una cuenta de GitHub.</p>
+      <p class="muted">Alta local habilitada por administración. Para el piloto, utiliza el enlace de invitación de tu centro.</p>
       {% if error %}
       <div class="alert alert-error">{{ error }}</div>
       {% endif %}
       <form method="post" action="/register" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
         <label>
           Nombre completo
           <input type="text" name="full_name" required />

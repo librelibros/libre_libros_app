@@ -11,7 +11,7 @@
       <p class="eyebrow">Plataforma editorial</p>
       <h1>Acceder a Libre Libros</h1>
       <p class="muted">
-        Libre Libros usa cuentas de GitHub para identificar a quienes crean, editan y proponen cambios en los libros.
+        Accede con tu cuenta para crear, editar y proponer cambios. El acceso local no requiere GitHub.
       </p>
       {% if error %}
       <div class="alert alert-error">{{ error }}</div>
@@ -19,11 +19,12 @@
       {% if github_enabled %}
       <div class="stack compact">
         <a class="button" href="/auth/github/start">Entrar o crear cuenta con {{ github_name }}</a>
-        <p class="muted">Si es tu primera vez, GitHub te pedirá autorización y Libre Libros creará tu perfil automáticamente.</p>
+        <p class="muted">En modo invitación, solo pueden entrar identidades externas vinculadas previamente por administración.</p>
       </div>
       {% endif %}
       {% if not external_auth_only %}
       <form method="post" action="/login" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
         {% if github_enabled %}
         <p class="muted">Acceso local solo para administración y desarrollo.</p>
         {% endif %}
@@ -51,7 +52,9 @@
         <a class="button button-tonal" href="/auth/oidc/start">Entrar con SSO</a>
         {% endif %}
       </div>
-      {% if github_enabled or gitlab_enabled or google_enabled or oidc_enabled %}
+      {% if invitation_only %}
+      <p class="muted">El alta requiere una invitación. Abre el enlace recibido de tu centro.</p>
+      {% elif github_enabled or gitlab_enabled or google_enabled or oidc_enabled %}
       <p class="muted">¿No tienes cuenta? <a href="/register">Crea una con tu proveedor de identidad</a></p>
       {% elif not external_auth_only %}
       <p class="muted">¿No tienes cuenta? <a href="/register">Crear usuario local</a></p>

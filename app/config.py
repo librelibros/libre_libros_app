@@ -1,8 +1,12 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_INSECURE_DEFAULT_SECRETS = {"", "change-me-in-production"}
 
 
 class Settings(BaseSettings):
@@ -14,6 +18,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Libre Libros"
     secret_key: str = "change-me-in-production"
+    environment: str = "development"
     database_url: str = "sqlite:///./data/libre_libros.db"
     host: str = "0.0.0.0"
     port: int = 8000
@@ -24,6 +29,20 @@ class Settings(BaseSettings):
     max_audio_bytes: int = 2 * 1024 * 1024
     session_cookie_name: str = "libre_libros_session"
     external_auth_only: bool = False
+    invitation_only: bool = False
+    invitation_ttl_hours: int = Field(default=48, ge=1, le=168)
+    invitation_max_per_hour: int = Field(default=30, ge=1)
+    csrf_enabled: bool = True
+    csrf_check_origin: bool = True
+    # Demo/local-only: browsers send the opaque sentinel `Origin: null` from
+    # file:// or sandboxed contexts. Production must keep rejecting it
+    # (OWASP CSRF: sandboxed iframe sends Origin: null too).
+    csrf_allow_null_origin: bool = False
+    csrf_require_origin: bool = False
+    csrf_allowed_origins: list[str] = Field(default_factory=list)
+    session_https_only: bool = False
+    session_max_age: int = Field(default=43200, ge=60)
+    public_base_url: str | None = None
 
     init_admin_email: str | None = None
     init_admin_password: str | None = None
@@ -63,6 +82,19 @@ class Settings(BaseSettings):
     bootstrap_repository_public: bool = True
 
     @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() in {"production", "prod"}
+
+    @model_validator(mode="after")
+    def _enforce_secure_defaults(self) -> "Settings":
+        if self.environment.strip().lower() not in {"development", "dev", "test", "testing"} and self.secret_key.strip() in _INSECURE_DEFAULT_SECRETS:
+            raise ValueError(
+                "LIBRE_LIBROS_SECRET_KEY debe configurarse explícitamente en producción: "
+                "la clave por defecto no es válida fuera de desarrollo."
+            )
+        return self
+
+    @property
     def sqlite_connect_args(self) -> dict[str, bool]:
         if self.database_url.startswith("sqlite"):
             return {"check_same_thread": False}
@@ -71,6 +103,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    settings = Settings()
+    # Demo/tests can explicitly disable dotenv without touching the owner's files.
+    env_file = os.environ.get("LIBRE_LIBROS_ENV_FILE", ".env")
+    settings = Settings(_env_file=env_file or None)
     settings.repos_root.mkdir(parents=True, exist_ok=True)
     return settings

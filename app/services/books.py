@@ -46,62 +46,9 @@ def export_markdown_to_pdf(
     content: str,
     asset_loader: Callable[[str], bytes] | None = None,
 ) -> bytes:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=48, rightMargin=48, topMargin=56, bottomMargin=56)
-    styles = getSampleStyleSheet()
-    body_style = ParagraphStyle("BookBody", parent=styles["BodyText"], leading=16, spaceAfter=0)
-    list_style = ParagraphStyle("BookList", parent=body_style, leftIndent=16, firstLineIndent=-10)
-    caption_style = ParagraphStyle(
-        "BookCaption",
-        parent=styles["Italic"],
-        fontSize=9,
-        leading=11,
-        alignment=1,
-        textColor="#5d708b",
-    )
-    fallback_style = ParagraphStyle("BookFallback", parent=body_style, textColor="#9f2d37")
-    story = [Paragraph(book.title, styles["Title"]), Spacer(1, 12)]
-    image_max_width = doc.width
-    image_max_height = doc.height * 0.42
+    from app.services.pdf_export import render_pdf
 
-    for raw_line in flatten_rich_markdown_for_pdf(content).splitlines():
-        line = raw_line.strip()
-        if PAGEBREAK_PATTERN.match(line):
-            story.append(PageBreak())
-            continue
-        if not line:
-            story.append(Spacer(1, 8))
-            continue
-        image_match = MARKDOWN_IMAGE_PATTERN.match(line)
-        if image_match:
-            story.extend(
-                _build_pdf_image_block(
-                    alt_text=image_match.group("alt").strip(),
-                    asset_path=image_match.group("path").strip(),
-                    asset_loader=asset_loader,
-                    max_width=_image_width_from_attrs(image_match.group("attrs"), image_max_width),
-                    max_height=image_max_height,
-                    caption_style=caption_style,
-                    fallback_style=fallback_style,
-                )
-            )
-            continue
-        if line.startswith("### "):
-            story.append(Paragraph(escape(line[4:]), styles["Heading3"]))
-        elif line.startswith("## "):
-            story.append(Paragraph(escape(line[3:]), styles["Heading2"]))
-        elif line.startswith("# "):
-            story.append(Paragraph(escape(line[2:]), styles["Heading1"]))
-        elif unordered_match := MARKDOWN_UNORDERED_ITEM_PATTERN.match(line):
-            story.append(Paragraph(f"• {escape(unordered_match.group('body'))}", list_style))
-        elif ordered_match := MARKDOWN_ORDERED_ITEM_PATTERN.match(line):
-            story.append(Paragraph(f"{ordered_match.group('index')}. {escape(ordered_match.group('body'))}", list_style))
-        else:
-            story.append(Paragraph(escape(line), body_style))
-        story.append(Spacer(1, 6))
-
-    doc.build(story)
-    return buffer.getvalue()
+    return render_pdf(book.title, content, asset_loader=asset_loader)
 
 
 def sanitize_filename(filename: str) -> str:

@@ -62,7 +62,6 @@ def _upsert_repository_source(
 def _sync_catalog_from_source(db: Session, repo_source: RepositorySource) -> None:
     repo = repository_client_for(repo_source)
     book_paths = sorted(path for path in repo.list_files("books", repo_source.default_branch) if path.endswith("/book.md"))
-    discovered_paths = set(book_paths)
 
     for rel_path in book_paths:
         markdown_content = repo.read_text(rel_path, repo_source.default_branch)
@@ -97,9 +96,7 @@ def _sync_catalog_from_source(db: Session, repo_source: RepositorySource) -> Non
             existing_book.summary = summary
             existing_book.assets_path = assets_path
             existing_book.base_branch = repo_source.default_branch
-            existing_book.visibility = Visibility.public
-            existing_book.owner_user_id = None
-            existing_book.organization_id = None
+            # Catalog refresh must not change editorial access or ownership.
             continue
 
         db.add(
@@ -119,10 +116,8 @@ def _sync_catalog_from_source(db: Session, repo_source: RepositorySource) -> Non
             )
         )
 
-    stale_books = db.query(Book).filter(Book.repository_source_id == repo_source.id).all()
-    for book in stale_books:
-        if book.content_path not in discovered_paths:
-            db.delete(book)
+    # A partial or empty provider listing must never erase books and their
+    # comments/reviews. Removal is an explicit editorial operation, not startup.
 
 
 def _delete_repository_source(db: Session, repo_source: RepositorySource) -> None:

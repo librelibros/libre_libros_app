@@ -32,6 +32,26 @@ def ensure_runtime_schema() -> None:
         if "last_synced_at" not in existing_columns:
             alter_statements.append("ALTER TABLE review_requests ADD COLUMN last_synced_at TIMESTAMP NULL")
 
+    if "users" in tables:
+        existing_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "session_version" not in existing_columns:
+            alter_statements.append("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1")
+
+    if "organization_memberships" in tables:
+        # Fail closed on ambiguous legacy memberships; never pick a role or
+        # delete a duplicate automatically during startup.
+        with engine.connect() as connection:
+            duplicate = connection.execute(text(
+                "SELECT user_id, organization_id FROM organization_memberships "
+                "GROUP BY user_id, organization_id HAVING COUNT(*) > 1"
+            )).first()
+            if duplicate:
+                raise RuntimeError("Membresías duplicadas: resolver manualmente antes de arrancar.")
+        alter_statements.append(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_membership_user_org "
+            "ON organization_memberships (user_id, organization_id)"
+        )
+
     if not alter_statements:
         return
 

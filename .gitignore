@@ -1,3 +1,7 @@
+# Local agent permissions and private demo runtime
+.agents/settings.local.json
+.local/
+
 # Environment
 .env
 .env_docker

@@ -17,6 +17,9 @@
     </div>
   </div>
 
+  {% if version_pending %}
+  <p class="notice" role="status">Esta versión aún no se ha creado. Estás leyendo la ficha base; pulsa Editar y guarda para crear tu versión.</p>
+  {% endif %}
   {% include "books/_document.html" %}
 </section>
 {% endblock %}
