@@ -44,8 +44,12 @@ services:
         sync: false
 
       # --- Auth ---
-      - key: LIBRE_LIBROS_EXTERNAL_AUTH_ONLY
+      # Pilot mode: invitation-only local access; GitHub OAuth stays enabled
+      # for provisioned identities. Mirrored by the deploy workflow.
+      - key: LIBRE_LIBROS_INVITATION_ONLY
         value: true
+      - key: LIBRE_LIBROS_EXTERNAL_AUTH_ONLY
+        value: false
       - key: LIBRE_LIBROS_GITHUB_OAUTH_ENABLED
         value: true
       - key: LIBRE_LIBROS_GITHUB_OAUTH_CLIENT_ID

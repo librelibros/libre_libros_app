@@ -87,10 +87,12 @@ jobs:
           upsert "SUPABASE_KEY"               "$SUPABASE_KEY"
           upsert "LIBRE_LIBROS_SECRET_KEY"    "$LIBRE_LIBROS_SECRET_KEY"
           upsert "LIBRE_LIBROS_DATABASE_URL"  "$LIBRE_LIBROS_DATABASE_URL"
-          # Operating mode flags (not secret, but force-applied on every deploy
-          # so a manually-created Render service can't drift away from them).
+          # Pilot mode: local accounts via admin-issued invitations (no GitHub
+          # account required for teachers). GitHub OAuth stays available for
+          # provisioned external identities but is not mandatory.
           upsert "LIBRE_LIBROS_ENVIRONMENT"          "production"
-          upsert "LIBRE_LIBROS_EXTERNAL_AUTH_ONLY"   "true"
+          upsert "LIBRE_LIBROS_INVITATION_ONLY"      "true"
+          upsert "LIBRE_LIBROS_EXTERNAL_AUTH_ONLY"   "false"
           upsert "LIBRE_LIBROS_GITHUB_OAUTH_ENABLED" "true"
           upsert "LIBRE_LIBROS_GITHUB_OAUTH_NAME"    "GitHub"
           # Bootstrap content repo (librelibros/libre_libros_content). Same
