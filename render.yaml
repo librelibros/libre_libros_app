@@ -4,9 +4,13 @@ services:
     runtime: docker
     plan: free
     healthCheckPath: /healthz
-    autoDeploy: true
+    # Actions is the sole deploy trigger after CI. Existing manual services
+    # require an authorized Dashboard change too; this file cannot change them.
+    autoDeploy: false
     envVars:
       # --- Core app ---
+      - key: LIBRE_LIBROS_ENVIRONMENT
+        value: production
       - key: LIBRE_LIBROS_SECRET_KEY
         sync: false
       # Production database. Set this to the Supabase Postgres connection

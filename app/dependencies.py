@@ -14,7 +14,15 @@ def get_current_user(
     user_id = request.session.get("user_id")
     if not user_id:
         return None
-    return db.get(User, user_id)
+    user = db.get(User, user_id)
+    # Sesión sólo válida para cuentas activas y de la misma versión de sesión.
+    if not user or not user.is_active:
+        request.session.clear()
+        return None
+    if request.session.get("session_version") != user.session_version:
+        request.session.clear()
+        return None
+    return user
 
 
 def require_user(user: User | None = Depends(get_current_user)) -> User:

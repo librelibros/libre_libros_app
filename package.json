@@ -5,15 +5,16 @@
     "build:editor": "node scripts/build-editor.mjs"
   },
   "dependencies": {
-    "@tiptap/core": "^3.0.7",
-    "@tiptap/extension-image": "^3.0.7",
-    "@tiptap/extension-link": "^3.0.7",
-    "@tiptap/extension-placeholder": "^3.0.7",
-    "@tiptap/starter-kit": "^3.0.7",
-    "marked": "^16.3.0",
-    "turndown": "^7.2.1"
+    "@tiptap/core": "3.30.5",
+    "@tiptap/extension-image": "3.30.5",
+    "@tiptap/extension-link": "3.30.5",
+    "@tiptap/extension-placeholder": "3.30.5",
+    "@tiptap/extension-table": "3.30.5",
+    "@tiptap/starter-kit": "3.30.5",
+    "marked": "^16.3.0"
   },
   "devDependencies": {
-    "esbuild": "^0.25.10"
+    "esbuild": "^0.25.10",
+    "jsdom": "26.1.0"
   }
 }

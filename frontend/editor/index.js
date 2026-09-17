@@ -1,150 +1,8 @@
-import { Editor, Node, mergeAttributes } from "@tiptap/core";
-import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
-import Placeholder from "@tiptap/extension-placeholder";
-import { marked } from "marked";
-import TurndownService from "turndown";
-
-const PAGEBREAK_MARKER = "<!-- pagebreak -->";
-const COLUMN_START_PATTERN = /^\s*\[\[columns:(2|3)\]\]\s*$/i;
-const COLUMN_SEPARATOR_PATTERN = /^\s*\[\[col\]\]\s*$/i;
-const COLUMN_END_PATTERN = /^\s*\[\[\/columns\]\]\s*$/i;
-const WORKSHEET_TOKEN_PATTERN = /\[\[worksheet:([A-Za-z0-9\-_]+)(?:\|([^\]]+))?\]\]/gi;
-const IMAGE_WITH_ATTR_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)\{:\s*([^}]+)\s*\}/g;
-const IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
-const AUDIO_PATTERN = /<audio\s+controls\s+src="([^"]+)"\s*><\/audio>/gi;
-
-marked.setOptions({
-  gfm: true,
-  breaks: false,
-});
-
-const PageBreak = Node.create({
-  name: "pageBreak",
-  group: "block",
-  atom: true,
-  selectable: true,
-
-  parseHTML() {
-    return [{ tag: 'hr[data-pagebreak="true"]' }];
-  },
-
-  renderHTML() {
-    return ["hr", { "data-pagebreak": "true", class: "editor-pagebreak" }];
-  },
-});
-
-const ColumnBlock = Node.create({
-  name: "columnBlock",
-  content: "block+",
-  isolating: true,
-
-  parseHTML() {
-    return [{ tag: "div[data-layout-column]" }];
-  },
-
-  renderHTML() {
-    return ["div", { "data-layout-column": "true", class: "doc-column editor-column" }, 0];
-  },
-});
-
-const ColumnsBlock = Node.create({
-  name: "columnsBlock",
-  group: "block",
-  content: "columnBlock+",
-  isolating: true,
-  defining: true,
-
-  addAttributes() {
-    return {
-      count: {
-        default: 2,
-        parseHTML: (element) => Number(element.getAttribute("data-count") || 2),
-        renderHTML: (attributes) => ({ "data-count": String(attributes.count || 2) }),
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: 'div[data-layout="columns"]' }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    const count = HTMLAttributes.count || 2;
-    return [
-      "div",
-      mergeAttributes(HTMLAttributes, {
-        "data-layout": "columns",
-        class: `doc-columns editor-columns doc-columns-${count} editor-columns-${count}`,
-      }),
-      0,
-    ];
-  },
-});
-
-const AudioBlock = Node.create({
-  name: "audioBlock",
-  group: "block",
-  atom: true,
-  selectable: true,
-
-  addAttributes() {
-    return {
-      src: {
-        default: null,
-      },
-      dataAssetPath: {
-        default: null,
-        parseHTML: (element) => element.getAttribute("data-asset-path"),
-        renderHTML: (attributes) =>
-          attributes.dataAssetPath ? { "data-asset-path": attributes.dataAssetPath } : {},
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: "audio[data-editor-audio]" }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return ["audio", mergeAttributes(HTMLAttributes, { controls: "controls", "data-editor-audio": "true" })];
-  },
-});
-
-const WorksheetLink = Link.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      class: {
-        default: "worksheet-link",
-      },
-      dataWorksheetSlug: {
-        default: null,
-        parseHTML: (element) => element.getAttribute("data-worksheet-slug"),
-        renderHTML: (attributes) =>
-          attributes.dataWorksheetSlug ? { "data-worksheet-slug": attributes.dataWorksheetSlug } : {},
-      },
-    };
-  },
-});
-
-const RichImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      class: {
-        default: "doc-image doc-align-center doc-w-100",
-      },
-      dataAssetPath: {
-        default: null,
-        parseHTML: (element) => element.getAttribute("data-asset-path"),
-        renderHTML: (attributes) =>
-          attributes.dataAssetPath ? { "data-asset-path": attributes.dataAssetPath } : {},
-      },
-    };
-  },
-});
+import { Editor } from "@tiptap/core";
+import { editorExtensions } from "./extensions.mjs";
+import { prepareDocument, importText } from "./contract.mjs";
+import { loadDocument, checkedSerialization } from "./document.mjs";
+import { initializeIntegrityControls, setStatus } from "./controls.mjs";
 
 function sanitizeAssetFilename(filename) {
   const lastDot = filename.lastIndexOf(".");
@@ -199,291 +57,7 @@ function resolveAssetUrl(form, path) {
   const bookId = form.querySelector("[data-editor-book-id]")?.value;
   const branchName = form.querySelector("[data-editor-branch]")?.value;
   if (!bookId || !branchName) return path;
-  return `/books/${bookId}/${path}?branch=${branchName}`;
-}
-
-function convertMarkdownImages(chunk, form) {
-  let prepared = chunk.replace(IMAGE_WITH_ATTR_PATTERN, (_match, alt, path, classes) => {
-    const classValue = classes
-      .split(/\s+/)
-      .filter((item) => item.startsWith("."))
-      .map((item) => item.slice(1))
-      .join(" ");
-    const cleanPath = path.trim();
-    return `<img src="${resolveAssetUrl(form, cleanPath)}" alt="${alt}" class="${classValue}" data-asset-path="${cleanPath}" />`;
-  });
-
-  prepared = prepared.replace(IMAGE_PATTERN, (match, alt, path) => {
-    if (match.includes("{:")) return match;
-    const cleanPath = path.trim();
-    return `<img src="${resolveAssetUrl(form, cleanPath)}" alt="${alt}" class="${buildMediaClass()}" data-asset-path="${cleanPath}" />`;
-  });
-
-  prepared = prepared.replace(AUDIO_PATTERN, (_match, path) => {
-    const cleanPath = path.trim();
-    return `<audio controls src="${resolveAssetUrl(form, cleanPath)}" data-editor-audio="true" data-asset-path="${cleanPath}"></audio>`;
-  });
-
-  return prepared;
-}
-
-function replaceWorksheetTokens(chunk) {
-  return chunk.replace(WORKSHEET_TOKEN_PATTERN, (_match, slug, label) => {
-    const finalLabel = (label || slug.replace(/-/g, " ")).trim();
-    return `<a href="#worksheet-${slug}" class="worksheet-link" data-worksheet-slug="${slug}">${finalLabel}</a>`;
-  });
-}
-
-function renderMarkdownChunk(chunk, form) {
-  const prepared = replaceWorksheetTokens(convertMarkdownImages(chunk, form)).replaceAll(
-    PAGEBREAK_MARKER,
-    '<hr data-pagebreak="true" class="editor-pagebreak" />',
-  );
-  return marked.parse(prepared);
-}
-
-function markdownToEditorHtml(markdownText, form) {
-  const lines = (markdownText || "").split("\n");
-  const fragments = [];
-  const buffer = [];
-  let index = 0;
-
-  const flushBuffer = () => {
-    if (!buffer.length) return;
-    const chunk = buffer.join("\n").trim();
-    buffer.length = 0;
-    if (chunk) fragments.push(renderMarkdownChunk(chunk, form));
-  };
-
-  while (index < lines.length) {
-    const match = lines[index].match(COLUMN_START_PATTERN);
-    if (!match) {
-      buffer.push(lines[index]);
-      index += 1;
-      continue;
-    }
-
-    flushBuffer();
-    const count = Number(match[1]);
-    const columns = [];
-    const current = [];
-    index += 1;
-
-    while (index < lines.length) {
-      const currentLine = lines[index];
-      if (COLUMN_SEPARATOR_PATTERN.test(currentLine)) {
-        columns.push(current.join("\n").trim());
-        current.length = 0;
-        index += 1;
-        continue;
-      }
-      if (COLUMN_END_PATTERN.test(currentLine)) {
-        columns.push(current.join("\n").trim());
-        index += 1;
-        break;
-      }
-      current.push(currentLine);
-      index += 1;
-    }
-
-    const columnHtml = columns
-      .slice(0, count)
-      .map((column) => {
-        const content = column || "_Columna vacía_";
-        return `<div data-layout-column="true" class="doc-column editor-column">${renderMarkdownChunk(content, form)}</div>`;
-      })
-      .join("");
-
-    fragments.push(`<div data-layout="columns" data-count="${count}" class="doc-columns editor-columns doc-columns-${count} editor-columns-${count}">${columnHtml}</div>`);
-  }
-
-  flushBuffer();
-  return fragments.join("\n");
-}
-
-function buildTurndown() {
-  const service = new TurndownService({
-    bulletListMarker: "-",
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-  });
-
-  service.keep(["audio"]);
-
-  service.addRule("pageBreak", {
-    filter: (node) => node.nodeName === "HR" && node.getAttribute("data-pagebreak") === "true",
-    replacement: () => `\n\n${PAGEBREAK_MARKER}\n\n`,
-  });
-
-  service.addRule("worksheetLink", {
-    filter: (node) => node.nodeName === "A" && node.getAttribute("data-worksheet-slug"),
-    replacement: (_content, node) => {
-      const slug = node.getAttribute("data-worksheet-slug");
-      const label = (node.textContent || slug || "").trim();
-      return `[[worksheet:${slug}|${label}]]`;
-    },
-  });
-
-  service.addRule("richImage", {
-    filter: (node) => node.nodeName === "IMG" && node.getAttribute("data-asset-path"),
-    replacement: (_content, node) => {
-      const path = node.getAttribute("data-asset-path") || node.getAttribute("src") || "";
-      const alt = node.getAttribute("alt") || "";
-      const classValue = node.getAttribute("class") || buildMediaClass();
-      const classes = classValue
-        .split(/\s+/)
-        .filter((value) => value && value !== "ProseMirror-selectednode")
-        .map((value) => `.${value}`)
-        .join(" ");
-      return `![${alt}](${path}){: ${classes}}`;
-    },
-  });
-
-  service.addRule("audioBlock", {
-    filter: (node) => node.nodeName === "AUDIO" && (node.getAttribute("data-asset-path") || node.getAttribute("src")),
-    replacement: (_content, node) => {
-      const path = node.getAttribute("data-asset-path") || node.getAttribute("src") || "";
-      return `<audio controls src="${path}"></audio>`;
-    },
-  });
-
-  service.addRule("columnsBlock", {
-    filter: (node) => node.nodeName === "DIV" && node.getAttribute("data-layout") === "columns",
-    replacement: (_content, node) => {
-      const count = Number(node.getAttribute("data-count") || 2);
-      const columns = [...node.querySelectorAll(':scope > div[data-layout-column]')].map((column) => {
-        const converted = service.turndown(column.innerHTML).trim();
-        return converted || "Escribe aquí el contenido de la columna.";
-      });
-      return `\n\n[[columns:${count}]]\n${columns.join("\n[[col]]\n")}\n[[/columns]]\n\n`;
-    },
-  });
-
-  return service;
-}
-
-function serializeTextWithMarks(node) {
-  let value = node.text || "";
-  const marks = [...(node.marks || [])];
-  const order = { bold: 1, italic: 2, link: 3 };
-  marks.sort((left, right) => (order[left.type] || 99) - (order[right.type] || 99));
-
-  marks.forEach((mark) => {
-    if (mark.type === "bold") value = `**${value}**`;
-    if (mark.type === "italic") value = `*${value}*`;
-    if (mark.type === "link") {
-      const attrs = mark.attrs || {};
-      if (attrs.dataWorksheetSlug) {
-        value = `[[worksheet:${attrs.dataWorksheetSlug}|${value}]]`;
-      } else if (attrs.href) {
-        value = `[${value}](${attrs.href})`;
-      }
-    }
-  });
-
-  return value;
-}
-
-function serializeInlineNodes(nodes = []) {
-  return nodes
-    .map((node) => {
-      if (node.type === "text") return serializeTextWithMarks(node);
-      if (node.type === "hardBreak") return "  \n";
-      return serializeNode(node);
-    })
-    .join("");
-}
-
-function indentMarkdown(markdown, prefix = "  ") {
-  return markdown
-    .split("\n")
-    .map((line) => (line ? `${prefix}${line}` : line))
-    .join("\n");
-}
-
-function serializeListItem(node, prefix) {
-  const blocks = (node.content || []).map((child) => serializeNode(child)).filter(Boolean);
-  if (!blocks.length) return prefix.trimEnd();
-
-  const firstLines = blocks[0].split("\n");
-  const lines = [`${prefix}${firstLines[0]}`];
-  firstLines.slice(1).forEach((line) => lines.push(line ? `  ${line}` : ""));
-
-  blocks.slice(1).forEach((block) => {
-    block.split("\n").forEach((line) => lines.push(line ? `  ${line}` : ""));
-  });
-
-  return lines.join("\n");
-}
-
-function serializeList(node, ordered = false) {
-  return (node.content || [])
-    .map((item, index) => serializeListItem(item, ordered ? `${index + 1}. ` : "- "))
-    .join("\n");
-}
-
-function serializeColumns(node) {
-  const count = Number(node.attrs?.count || (node.content || []).length || 2);
-  const columns = (node.content || []).map((column) => {
-    const content = serializeBlocks(column.content || []);
-    return content || "_Columna vacia_";
-  });
-  return `[[columns:${count}]]\n${columns.join("\n[[col]]\n")}\n[[/columns]]`;
-}
-
-function serializeImage(node) {
-  const attrs = node.attrs || {};
-  const path = attrs.dataAssetPath || attrs.src || "";
-  const alt = attrs.alt || "";
-  const classValue = attrs.class || buildMediaClass();
-  const classes = classValue
-    .split(/\s+/)
-    .filter((value) => value && value !== "ProseMirror-selectednode")
-    .map((value) => `.${value}`)
-    .join(" ");
-  return `![${alt}](${path}){: ${classes}}`;
-}
-
-function serializeAudio(node) {
-  const attrs = node.attrs || {};
-  const path = attrs.dataAssetPath || attrs.src || "";
-  return `<audio controls src="${path}"></audio>`;
-}
-
-function serializeNode(node) {
-  if (!node) return "";
-  if (node.type === "text") return serializeTextWithMarks(node);
-  if (node.type === "paragraph") return serializeInlineNodes(node.content || []).trim();
-  if (node.type === "heading") return `${"#".repeat(node.attrs?.level || 2)} ${serializeInlineNodes(node.content || []).trim()}`.trim();
-  if (node.type === "bulletList") return serializeList(node, false);
-  if (node.type === "orderedList") return serializeList(node, true);
-  if (node.type === "blockquote") {
-    return serializeBlocks(node.content || [])
-      .split("\n")
-      .map((line) => (line ? `> ${line}` : ">"))
-      .join("\n");
-  }
-  if (node.type === "pageBreak") return PAGEBREAK_MARKER;
-  if (node.type === "columnsBlock") return serializeColumns(node);
-  if (node.type === "columnBlock") return serializeBlocks(node.content || []);
-  if (node.type === "image") return serializeImage(node);
-  if (node.type === "audioBlock") return serializeAudio(node);
-  if (node.type === "horizontalRule") return "---";
-  return serializeInlineNodes(node.content || []).trim();
-}
-
-function serializeBlocks(nodes = []) {
-  return nodes
-    .map((node) => serializeNode(node))
-    .filter((value) => value && value.trim())
-    .join("\n\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function serializeEditorDocument(editor) {
-  const documentJson = editor.getJSON();
-  return serializeBlocks(documentJson.content || []);
+  return `/books/${bookId}/${path.split('/').map(encodeURIComponent).join('/')}?${new URLSearchParams({branch: branchName})}`;
 }
 
 function buildPendingAssetSummary(files) {
@@ -634,9 +208,14 @@ function renderPendingAssets(form) {
         if (queuedIndex !== index) nextTransfer.items.add(queued);
       });
       state.transfer = nextTransfer;
+      const positions = [];
+      state.editor.state.doc.descendants((node, pos) => { if (node.attrs.dataAssetPath === `assets/${file.name}`) positions.push({pos, size:node.nodeSize}); });
+      let transaction = state.editor.state.tr;
+      positions.reverse().forEach(({pos,size}) => { transaction = transaction.delete(pos,pos+size); });
+      if (positions.length) state.editor.view.dispatch(transaction);
       syncTransferToInput(form);
       renderPendingAssets(form);
-      updateSaveSummary(form);
+      syncMarkdownFromEditor(form, state.editor);
     });
 
     actions.append(removeButton);
@@ -647,15 +226,15 @@ function renderPendingAssets(form) {
 
 function updateSaveSummary(form) {
   const textarea = form.querySelector("[data-editor-input]");
-  const branchSelect = form.querySelector('select[name="branch_name"]');
+  const branchSelect = form.querySelector('[name="branch_name"]');
   const files = [...form._richState.transfer.files];
   const markdown = textarea?.value || "";
   const columnsCount = (markdown.match(/\[\[columns:[23]\]\]/gi) || []).length;
   const worksheetsCount = (markdown.match(/\[\[worksheet:[^\]]+\]\]/gi) || []).length;
   const branchName = branchSelect?.value || "";
-  const branchLabel = formatBranchLabel(branchName);
+  const branchLabel = branchSelect?.dataset.branchLabel || formatBranchLabel(branchName);
 
-  form.querySelector("[data-active-branch-label]")?.replaceChildren(document.createTextNode(`Espacio activo: ${branchLabel}`));
+  form.querySelector("[data-active-branch-label]")?.replaceChildren(document.createTextNode(branchLabel));
   const saveBranch = form.querySelector("[data-save-branch]");
   if (saveBranch) saveBranch.textContent = branchLabel;
   form.querySelectorAll("[data-save-columns]").forEach((node) => {
@@ -707,16 +286,41 @@ async function refreshPreview(form) {
   const branchName = form.querySelector("[data-editor-branch]")?.value;
   if (bookId) body.append("book_id", bookId);
   if (branchName) body.append("branch_name", branchName);
-  const response = await fetch("/books/preview", { method: "POST", body });
-  preview.innerHTML = await response.text();
-  initializeBookDocuments(preview);
-  hydrateDraftAssetsInPreview(form);
+  const state = form._richState;
+  state.previewAbort?.abort();
+  const controller = new AbortController();
+  state.previewAbort = controller;
+  setStatus(form, "Preparando lectura…");
+  try {
+    const response = await fetch("/books/preview", window.LibreLibrosCSRF.options("/books/preview", { method: "POST", body, signal: controller.signal }));
+    if (!response.ok || response.redirected) throw new Error('preview');
+    const html = await response.text();
+    if (controller.signal.aborted) return;
+    preview.innerHTML = html;
+    initializeBookDocuments(preview);
+    hydrateDraftAssetsInPreview(form);
+    setStatus(form, "Lectura actualizada. No es una previsualización exacta del PDF.");
+  } catch (error) {
+    if (error.name !== 'AbortError') setStatus(form, "No se pudo actualizar la lectura. Tu borrador sigue aquí; vuelve a pulsar Lectura para reintentar.");
+  }
 }
 
 function syncMarkdownFromEditor(form, editor) {
   const textarea = form.querySelector("[data-editor-input]");
   if (!textarea) return;
-  textarea.value = serializeEditorDocument(editor);
+  const state = form._richState;
+  if (state.blocked) return;
+  try {
+    const unchanged = JSON.stringify(editor.getJSON()) === state.initialJSON;
+    textarea.value = unchanged ? state.original : checkedSerialization(editor.getJSON());
+    state.invalid = false;
+    state.dirty = textarea.value !== state.original || state.transfer.files.length > 0;
+    setStatus(form, state.dirty ? 'Cambios sin guardar.' : 'Sin cambios. Se conserva el archivo original.');
+  } catch (error) {
+    state.invalid = true;
+    state.dirty = true;
+    setStatus(form, error.message + ' El último borrador válido se conserva; Guardar está bloqueado hasta corregirlo.');
+  }
   updateSaveSummary(form);
   if (form._richState.mode === "preview") {
     window.clearTimeout(form._richState.previewTimer);
@@ -747,14 +351,21 @@ function insertWorksheet(editor, slug, title) {
 
 function insertPendingFiles(form, editor, files, mediaTypeOverride = null) {
   const state = form._richState;
-  const existing = new Set([...state.transfer.files].map((file) => `${file.name}:${file.size}:${file.lastModified}`));
-
-  [...files].forEach((file) => {
-    const key = `${file.name}:${file.size}:${file.lastModified}`;
-    if (existing.has(key)) return;
+  if (state.blocked || state.saving) return;
+  const used = new Set([...state.transfer.files].map(file => file.name));
+  form.querySelectorAll('[data-asset-filename]').forEach(button => used.add(button.dataset.assetFilename));
+  editor.state.doc.descendants(node => { if (node.attrs.dataAssetPath) used.add(node.attrs.dataAssetPath.split('/').pop()); });
+  [...files].forEach((originalFile) => {
+    if (!/^(image\/(png|jpeg|webp|gif)|audio\/mpeg)$/.test(originalFile.type) || originalFile.size > 10 * 1024 * 1024) {
+      setStatus(form, 'Recurso no añadido: usa PNG, JPEG, WebP, GIF o MP3 hasta 10 MB. SVG y documentos no se importan como recursos.'); return;
+    }
+    const extension = {'image/png':'.png','image/jpeg':'.jpg','image/webp':'.webp','image/gif':'.gif','audio/mpeg':'.mp3'}[originalFile.type];
+    const stem = slugifyName(originalFile.name.replace(/\.[^.]*$/, '')) || 'recurso';
+    let filename = stem + extension, suffix = 2;
+    while (used.has(filename)) filename = `${stem}-${suffix++}${extension}`;
+    used.add(filename);
+    const file = new File([originalFile], filename, {type:originalFile.type, lastModified:originalFile.lastModified});
     state.transfer.items.add(file);
-    existing.add(key);
-    const filename = sanitizeAssetFilename(file.name);
     const assetPath = `assets/${filename}`;
 
     if ((mediaTypeOverride || file.type).startsWith("image/")) {
@@ -822,8 +433,9 @@ function initializeSaveDialog(form) {
 
   const openDialog = () => {
     updateSaveSummary(form);
+    if (form._richState.invalid || form._richState.saving) { setStatus(form, 'Revisa el formato antes de guardar o espera al guardado actual.'); return; }
     if (dialog && typeof dialog.showModal === "function") {
-      dialog.showModal();
+      if (!dialog.open) dialog.showModal();
       form.querySelector("[data-save-commit-input]")?.focus();
       return;
     }
@@ -832,7 +444,7 @@ function initializeSaveDialog(form) {
 
   openButton?.addEventListener("click", openDialog);
   closeButton?.addEventListener("click", () => dialog?.close());
-  form.addEventListener("keydown", (event) => {
+  document.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
       openDialog();
@@ -841,6 +453,7 @@ function initializeSaveDialog(form) {
 }
 
 function initializeRichEditor(form) {
+  if (form._richState) return;
   const hiddenTextarea = form.querySelector("[data-editor-input]");
   const host = form.querySelector("[data-rich-editor]");
   if (!hiddenTextarea || !host) return;
@@ -850,35 +463,56 @@ function initializeRichEditor(form) {
     transfer: new DataTransfer(),
     objectUrls: new Map(),
     previewTimer: null,
+    original: hiddenTextarea.value,
+    dirty: false,
+    invalid: false,
+    blocked: false,
   };
-
-  const initialHtml = markdownToEditorHtml(hiddenTextarea.value, form);
+  const status = document.createElement('p');
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  form.prepend(status);
+  form._richState.status = status;
+  const prepared = loadDocument(hiddenTextarea.value, path => resolveAssetUrl(form, path));
+  const initialHtml = prepared.ok ? prepared.html : '<p></p>';
+  form._richState.blocked = !prepared.ok;
 
   const editor = new Editor({
     element: host,
-    extensions: [
-      StarterKit.configure({
-        horizontalRule: false,
-      }),
-      Placeholder.configure({
-        placeholder: "Empieza a escribir el material aquí. Usa la cinta superior para estructurarlo.",
-      }),
-      WorksheetLink.configure({
-        openOnClick: false,
-      }),
-      RichImage,
-      AudioBlock,
-      PageBreak,
-      ColumnsBlock,
-      ColumnBlock,
-    ],
+    extensions: editorExtensions(),
     content: initialHtml,
+    editable: prepared.ok,
+    editorProps: {
+      handlePaste(_view, event) {
+        // Office HTML can lose nodes before a transaction reaches onUpdate.
+        if (event.clipboardData?.types.includes('text/html') || event.clipboardData?.files.length) {
+          event.preventDefault();
+          setStatus(form, 'Pegado con formato bloqueado para evitar pérdidas. Usa pegar como texto (Ctrl/Cmd+Shift+V) o Importar .md/.txt.');
+          return true;
+        }
+        return false;
+      },
+      handleDrop(_view, event) { if (!event.dataTransfer?.files.length) { event.preventDefault(); setStatus(form, 'Para mover contenido usa cortar y pegar como texto.'); return true; } return false; },
+    },
     onUpdate: () => syncMarkdownFromEditor(form, editor),
     onSelectionUpdate: () => showMediaToolbar(form, editor),
   });
 
   form._richState.editor = editor;
-  syncMarkdownFromEditor(form, editor);
+  form._richState.initialJSON = JSON.stringify(editor.getJSON());
+  if (!prepared.ok) {
+    host.hidden = true;
+    const originalView = document.createElement('textarea');
+    originalView.readOnly = true;
+    originalView.value = hiddenTextarea.value;
+    originalView.rows = 16;
+    originalView.setAttribute('aria-label', 'Original conservado (solo lectura)');
+    host.after(originalView);
+    form.querySelectorAll('[data-rich-command], [data-insert-asset], [data-insert-worksheet], [data-asset-picker]').forEach(button => { button.disabled = true; });
+    setStatus(form, 'Edición visual bloqueada para no perder contenido. ' + prepared.warnings.join(' ') + ' Puedes descargar el original.');
+  } else setStatus(form, 'Sin cambios. El original se conservará al guardar. ' + prepared.warnings.join(' '));
+  initializeIntegrityControls(form, editor);
+  updateSaveSummary(form);
   renderPendingAssets(form);
   showMediaToolbar(form, editor);
 
@@ -886,7 +520,7 @@ function initializeRichEditor(form) {
     button.addEventListener("click", () => setMode(form, button.dataset.richModeButton || "edit"));
   });
 
-  form.querySelector('select[name="branch_name"]')?.addEventListener("change", (event) => {
+  form.querySelector('[name="branch_name"]')?.addEventListener("change", (event) => {
     const branchName = event.target.value || "";
     const hiddenBranch = form.querySelector("[data-editor-branch]");
     if (hiddenBranch) hiddenBranch.value = branchName;
@@ -929,6 +563,7 @@ function initializeRichEditor(form) {
     });
     target?.addEventListener("drop", (event) => {
       event.preventDefault();
+      event.stopPropagation();
       insertPendingFiles(form, editor, event.dataTransfer?.files || []);
     });
   });

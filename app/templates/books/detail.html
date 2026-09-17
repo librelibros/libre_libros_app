@@ -45,10 +45,13 @@
     {% endif %}
     {% if user and edit_branch %}
     <a class="button" href="/books/{{ book.id }}/edit?branch={{ edit_branch }}">Editar</a>
-    <a class="button button-tonal" href="/books/{{ book.id }}/export/pdf?branch={{ selected_branch }}">Exportar PDF</a>
+    <a class="button button-tonal" href="/books/{{ book.id }}/export/pdf?branch={{ read_branch or selected_branch }}">Exportar PDF</a>
     {% endif %}
   </form>
 
+  {% if version_pending %}
+  <p class="notice" role="status">Esta versión aún no se ha creado. Estás leyendo el material base; pulsa Editar y guarda los primeros cambios para crear tu versión.</p>
+  {% endif %}
   {% include "books/_document.html" %}
 </section>
 
@@ -60,6 +63,7 @@
       </div>
     {% if user and edit_branch %}
     <form method="post" action="/books/{{ book.id }}/worksheets/new" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <input type="hidden" name="branch_name" value="{{ edit_branch }}" />
       <label>
         Nueva ficha
@@ -104,6 +108,7 @@
     </div>
     {% if user %}
     <form method="post" action="/books/{{ book.id }}/comments" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <input type="hidden" name="branch_name" value="{{ selected_branch }}" />
       <label>
         Ancla opcional
@@ -128,6 +133,7 @@
           {% endif %}
           {% if user and (user.global_role.value == "admin" or user.id == comment.author_id) %}
           <form method="post" action="/books/{{ book.id }}/comments/{{ comment.id }}/delete">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
             <button class="button button-tonal" type="submit">Eliminar</button>
           </form>
           {% endif %}
@@ -149,6 +155,7 @@
     </div>
     {% if user %}
     <form method="post" action="/books/{{ book.id }}/issues" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <label>
         Nuevo aviso de problema
         <input type="text" name="title" required placeholder="Falta una actividad de repaso" />
@@ -163,6 +170,7 @@
 
     {% if can_create_proposal %}
     <form method="post" action="/books/{{ book.id }}/pull-requests" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <input type="hidden" name="head_branch" value="{{ proposal_head_branch }}" />
       <input type="hidden" name="base_branch" value="{{ proposal_base_branch }}" />
       <p class="muted">Tu propuesta de cambio recoge lo que has editado y se envía para que se revise antes de pasar a la versión visible para todo el mundo.</p>
@@ -179,6 +187,7 @@
     {% endif %}
     {% if user and version_context.can_manage_selected_version and selected_branch != version_context.approved_branch %}
     <form method="post" action="/books/{{ book.id }}/approve-version" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
       <input type="hidden" name="source_branch" value="{{ selected_branch }}" />
       <input type="hidden" name="target_branch" value="{{ version_context.approved_branch }}" />
       <p class="muted">Acepta esta versión como edición oficial del colegio y curso seleccionados.</p>

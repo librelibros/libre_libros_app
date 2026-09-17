@@ -20,11 +20,12 @@
     data-rich-markdown-editor
     enctype="multipart/form-data"
   >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
     <input type="hidden" name="content" data-editor-input value="{{ content }}" />
     <input type="hidden" name="book_id" value="{{ book.id }}" data-editor-book-id />
     <input type="hidden" name="preview_branch_name" value="{{ selected_branch }}" data-editor-branch />
     <input type="hidden" name="branch_name" value="{{ selected_branch }}" data-branch-label="{{ version_context.active_branch_label }}" />
-    <input type="file" name="assets" accept="image/*,audio/mpeg" multiple hidden data-asset-input />
+    <input type="file" name="assets" accept="image/png,image/jpeg,image/gif,image/webp,audio/mpeg" multiple hidden data-asset-input />
 
     <div class="editor-command-bar editor-command-bar-rich">
       <div class="editor-field editor-field-branch">

@@ -17,7 +17,9 @@ class BranchContext:
 
 
 def user_identity_slug(user: User) -> str:
-    return slugify(user.full_name or user.email.split("@")[0]) or "editor"
+    if user.id is None:
+        raise ValueError("El usuario debe tener una identidad persistente")
+    return f"id-{user.id}"
 
 
 def user_branch_name(user: User) -> str:
@@ -157,16 +159,26 @@ def available_branches_for_book(db: Session, user: User, book: Book) -> list[str
     return list(dict.fromkeys(branches))
 
 
-def can_edit_book_on_branch(db: Session, user: User, book: Book, branch_name: str) -> bool:
+def can_create_book_in_repository(user: User, source) -> bool:
     if user.global_role == GlobalRole.admin:
         return True
+    # Shared repositories are administered centrally; membership is required
+    # for organizational repositories, regardless of submitted form fields.
+    return bool(source.organization_id and any(m.organization_id == source.organization_id for m in user.memberships))
+
+
+def can_edit_book_on_branch(db: Session, user: User, book: Book, branch_name: str) -> bool:
     if not can_view_book(user, book):
         return False
-    if is_user_workspace_branch(user, branch_name):
-        return True
     context = parse_branch_context(branch_name)
+    if context.is_personal:
+        # Neither homonyms nor organization managers inherit workspace writes.
+        return is_user_workspace_branch(user, branch_name)
+    if user.global_role == GlobalRole.admin:
+        return True
     if context.organization_slug:
+        organization = organization_for_slug(db, context.organization_slug)
+        if not organization or (book.repository_source.organization_id and book.repository_source.organization_id != organization.id):
+            return False
         return can_manage_organization_version(db, user, context.organization_slug)
-    if book.organization and branch_name == organization_branch_name(book.organization.slug):
-        return can_manage_organization_version(db, user, book.organization.slug)
     return False

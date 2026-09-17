@@ -11,6 +11,7 @@
     <a class="button button-tonal" href="/">Volver al panel</a>
   </div>
   <form method="post" action="/admin/organizations/{{ organization.id }}/memberships" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
     <label>
       Usuario
       <select name="user_id">
@@ -38,6 +39,7 @@
       </div>
       <p>{{ membership.user.email }}</p>
       <form method="post" action="/admin/memberships/{{ membership.id }}/delete">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
         <button class="button button-tonal" type="submit">Quitar</button>
       </form>
     </div>

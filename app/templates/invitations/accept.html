@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Aceptar invitación · Libre Libros</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body class="auth-page">
+  <section class="auth-card stack">
+    <h1>Te damos la bienvenida</h1>
+    <p>Invitación para <strong>{{ invitation.email_normalized }}</strong>, como docente editor.</p>
+    {% if external_auth_only %}
+    <p>El acceso local está desactivado. Contacta con administración.</p>
+    {% else %}
+    <p>Si ya tienes cuenta, introduce su contraseña actual. No se cambiará tu contraseña ni tu nombre.</p>
+    <form method="post" action="/invite/accept" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}" />
+      <label>Nombre completo (para cuentas nuevas)<input name="full_name" maxlength="255" autocomplete="name" /></label>
+      <label>Contraseña<input type="password" name="password" maxlength="128" required /></label>
+      <p class="muted">Para cuentas nuevas: entre 12 y 128 caracteres. No necesitas una cuenta de GitHub.</p>
+      <button type="submit" class="button">Aceptar invitación</button>
+    </form>
+    {% endif %}
+    <a href="/login">Volver al acceso</a>
+  </section>
+</body>
+</html>

@@ -1,4 +1,6 @@
 import re
+from html import escape, unescape
+from urllib.parse import quote, urlencode
 
 import bleach
 from slugify import slugify
@@ -10,13 +12,14 @@ PAGEBREAK_MARKER = "<!-- pagebreak -->"
 HEADING_PATTERN = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.*?)(?:\s+\{#(?P<anchor>[A-Za-z0-9\-_]+)\})?\s*$")
 
 ALLOWED_TAGS = bleach.sanitizer.ALLOWED_TAGS.union(
-    {"p", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "span", "img", "audio", "source", "div"}
+    {"p", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "span", "img", "audio", "source", "div",
+     "table", "thead", "tbody", "tr", "th", "td", "s", "del"}
 )
 ALLOWED_ATTRIBUTES = {
     "*": ["class", "id"],
     "a": ["href", "title", "target", "rel"],
     "img": ["src", "alt"],
-    "audio": ["controls"],
+    "audio": ["controls", "src"],
     "source": ["src", "type"],
 }
 
@@ -114,14 +117,31 @@ def _unique_anchor(candidate: str, used_anchors: set[str]) -> str:
 
 
 def _rewrite_book_asset_urls(html: str, book_id: int, branch_name: str) -> str:
-    asset_pattern = re.compile(r'(?P<attr>(?:src|href))="(?P<path>(?:\./)?assets/[^"]+)"')
+    """Rewrite relative asset URLs into authenticated, branch-scoped book URLs.
+
+    Runs on sanitized HTML only. Attribute values are parsed (unescaped once) and
+    re-encoded safely, so a branch name containing quotes or markup can never
+    inject attributes or tags after the sanitization step (B02).
+    """
+    asset_pattern = re.compile(r'(?P<attr>(?:src|href))="(?P<path>(?:\./)?assets/[^"]*)"')
 
     def replace(match: re.Match[str]) -> str:
-        rel_path = match.group("path").removeprefix("./")
-        return f'{match.group("attr")}="/books/{book_id}/{rel_path}?branch={branch_name}"'
+        attr = match.group("attr")
+        rel_path = unescape(match.group("path")).removeprefix("./")
+        if not rel_path:
+            return match.group(0)
+        query: dict[str, str] = {}
+        if branch_name:
+            query["branch"] = branch_name
+        suffix = f"?{urlencode(query)}" if query else ""
+        url = f"/books/{int(book_id)}/{quote(rel_path)}{suffix}"
+        return f'{attr}="{escape(url, quote=True)}"'
 
-    return asset_pattern.sub(replace, html)
+    # All rewritten attributes pass through the final sanitizer as well.
+    return bleach.clean(asset_pattern.sub(replace, html), tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES)
 
 
 def _worksheet_url(book_id: int, worksheet_slug: str, branch_name: str) -> str:
-    return f"/books/{book_id}/worksheets/{worksheet_slug}?branch={branch_name}"
+    query = {"branch": branch_name} if branch_name else {}
+    suffix = f"?{urlencode(query)}" if query else ""
+    return f"/books/{int(book_id)}/worksheets/{quote(worksheet_slug)}{suffix}"

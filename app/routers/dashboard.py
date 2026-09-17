@@ -43,6 +43,7 @@ def home(
     recent_reviews = (
         db.query(ReviewRequest)
         .options(joinedload(ReviewRequest.book))
+        .filter(ReviewRequest.book_id.in_([book.id for book in visible_books]))
         .order_by(ReviewRequest.created_at.desc())
         .limit(10)
         .all()

@@ -12,8 +12,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import GlobalRole, User
-from app.routers import admin, auth, books, dashboard
-from app.security import hash_password, password_needs_rehash, verify_password
+from app.routers import admin, auth, books, dashboard, invitations
+from app.security import CsrfMiddleware, csrf_token, hash_password
 from app.services.bootstrap import sync_example_repository
 from app.services.runtime_migrations import ensure_runtime_schema
 from app.templates import templates
@@ -40,29 +40,10 @@ def create_default_admin() -> None:
     try:
         existing = db.query(User).filter(User.email == settings.init_admin_email.lower().strip()).first()
         if existing:
-            changed = False
-            if existing.full_name != settings.init_admin_name:
-                existing.full_name = settings.init_admin_name
-                changed = True
-            if existing.global_role != GlobalRole.admin:
-                existing.global_role = GlobalRole.admin
-                changed = True
-            desired_provider = default_external_auth_provider() if settings.external_auth_only else "local"
-            if existing.auth_provider != desired_provider:
-                existing.auth_provider = desired_provider
-                changed = True
-            if not settings.external_auth_only and settings.init_admin_password:
-                if password_needs_rehash(existing.password_hash) or not verify_password(
-                    settings.init_admin_password,
-                    existing.password_hash,
-                ):
-                    existing.password_hash = hash_password(settings.init_admin_password)
-                    changed = True
-            elif settings.external_auth_only and existing.password_hash is not None:
-                existing.password_hash = None
-                changed = True
-            if changed:
-                db.commit()
+            # Bootstrap is creation-only: never promote or reset an account
+            # because its email happens to match deployment configuration.
+            return
+        if settings.external_auth_only or not settings.init_admin_password:
             return
         admin_user = User(
             full_name=settings.init_admin_name,
@@ -116,10 +97,17 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_cookie=settings.session_cookie_name)
+app.add_middleware(CsrfMiddleware)
+# SessionMiddleware must wrap CSRF so the signed session is available first.
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key,
+                   session_cookie=settings.session_cookie_name, same_site="lax",
+                   https_only=settings.is_production or settings.session_https_only,
+                   max_age=settings.session_max_age)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
+templates.env.globals["csrf_token"] = csrf_token
+templates.env.globals["invitation_only"] = settings.invitation_only
 templates.env.globals["app_name"] = settings.app_name
 templates.env.globals["contact_email"] = settings.contact_email
 
@@ -140,6 +128,7 @@ app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(books.router)
 app.include_router(admin.router)
+app.include_router(invitations.router)
 
 
 @app.get("/healthz", include_in_schema=False)
@@ -152,6 +141,7 @@ def healthz_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("select 1"))
-    except Exception as exc:
-        return JSONResponse({"status": "error", "db": str(exc)[:200]}, status_code=503)
+    except Exception:
+        # Public readiness must never expose connection strings or DB errors.
+        return JSONResponse({"status": "error", "db": "unavailable"}, status_code=503)
     return {"status": "ok", "db": "ok"}

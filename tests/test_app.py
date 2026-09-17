@@ -1,29 +1,54 @@
+import json
 import os
 import subprocess
 import sys
 from base64 import b64decode
+from io import BytesIO
 from pathlib import Path
 
+from PIL import Image
+
 import bcrypt
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 
-TEST_PNG = b64decode(
+def _valid_png() -> bytes:
+    output = BytesIO()
+    Image.new("RGB", (16, 16), color=(36, 87, 197)).save(output, format="PNG")
+    return output.getvalue()
+
+
+TEST_PNG = _valid_png()
+# Deliberately truncated data, used only by corruption/placeholder regressions.
+BROKEN_RASTER_PNG = b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0xQAAAAASUVORK5CYII="
-)
-BROKEN_RASTER_PNG = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "repo"
-    / "books"
-    / "primaria"
-    / "lengua"
-    / "lengua-primaria"
-    / "assets"
-    / "column-demo-image.png"
-).read_bytes()
+)[:45]
+
+
+class SessionCsrfClient(TestClient):
+    """Functional client returning its own session token; no CSRF bypass.
+
+    This does not test form wiring. Raw TestClient remains available for
+    missing-token checks and browser tests must cover actual hidden inputs.
+    """
+
+    def request(self, method, url, **kwargs):
+        if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            from app.config import get_settings
+
+            cookie_name = get_settings().session_cookie_name
+            if not self.cookies.get(cookie_name):
+                self.get("/login")
+            session = self.cookies.get(cookie_name)
+            assert session, "Expected a session before submitting a form"
+            payload = json.loads(b64decode(session.split(".")[0]))
+            headers = dict(kwargs.pop("headers", None) or {})
+            headers.setdefault("x-csrf-token", payload["csrf_token"])
+            kwargs["headers"] = headers
+        return super().request(method, url, **kwargs)
 
 
 def build_client(tmp_path: Path):
@@ -45,8 +70,14 @@ def build_client(tmp_path: Path):
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='#2457c5'/></svg>",
         encoding="utf-8",
     )
-    (book_dir / "assets" / "aula.png").write_bytes(BROKEN_RASTER_PNG)
+    (book_dir / "assets" / "aula.png").write_bytes(TEST_PNG)
     (book_dir / "assets" / ".gitkeep").write_text("", encoding="utf-8")
+    # Seed a real committed branch; repository readers may intentionally ignore
+    # untracked files instead of exposing the working tree.
+    from scripts.journey_support import snapshot_example_repo
+
+    subprocess.run(["git", "init", "-b", "main", str(example_repo)], check=True, capture_output=True)
+    snapshot_example_repo(example_repo)
     os.environ["LIBRE_LIBROS_EXAMPLE_REPO_PATH"] = str(example_repo)
     os.environ["LIBRE_LIBROS_INIT_ADMIN_EMAIL"] = "admin@test.local"
     os.environ["LIBRE_LIBROS_INIT_ADMIN_PASSWORD"] = "admin12345"
@@ -57,7 +88,46 @@ def build_client(tmp_path: Path):
 
     from app.main import app
 
-    return TestClient(app)
+    client = SessionCsrfClient(app)
+    # Many callers intentionally use requests without a context manager. Run
+    # startup for this test's fresh DB rather than relying on a preceding test.
+    with client:
+        pass
+    return client
+
+
+@pytest.mark.parametrize("run", ["first", "second"])
+def test_build_client_has_a_fresh_database(tmp_path: Path, run):
+    client = build_client(tmp_path)
+
+    from app import database, main
+    from app.models import Book, User
+
+    assert Path(database.engine.url.database) == tmp_path / "test.db"
+    assert main.engine is database.engine
+    assert main.SessionLocal is database.SessionLocal
+    with database.SessionLocal() as db:
+        assert db.query(Book).count() == 1
+        assert db.query(User).count() == 1
+        db.add(User(full_name=run, email=f"{run}@test.local"))
+        db.commit()
+    assert client.get("/healthz/db").status_code == 200
+    client.close()
+
+
+def test_broken_raster_fixture_requires_tolerant_decoding(monkeypatch):
+    from io import BytesIO
+    from PIL import Image, ImageFile
+
+    assert BROKEN_RASTER_PNG.startswith(b"\x89PNG\r\n\x1a\n")
+    monkeypatch.setattr(ImageFile, "LOAD_TRUNCATED_IMAGES", False)
+    with pytest.raises((OSError, ValueError)):
+        with Image.open(BytesIO(BROKEN_RASTER_PNG)) as image:
+            image.load()
+    monkeypatch.setattr(ImageFile, "LOAD_TRUNCATED_IMAGES", True)
+    with Image.open(BytesIO(BROKEN_RASTER_PNG)) as image:
+        image.load()
+        assert image.size == (1, 1)
 
 
 def test_redirects_to_login(tmp_path: Path):
@@ -65,6 +135,39 @@ def test_redirects_to_login(tmp_path: Path):
     response = client.get("/", follow_redirects=False)
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
+
+
+def test_raw_client_requires_csrf_and_accepts_login_form_token(tmp_path: Path):
+    from html.parser import HTMLParser
+
+    class TokenParser(HTMLParser):
+        token = None
+
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            if tag == "input" and values.get("name") == "csrf_token":
+                self.token = values.get("value")
+
+    configured = build_client(tmp_path)
+    raw = TestClient(configured.app)
+    try:
+        page = raw.get("/login")
+        parser = TokenParser()
+        parser.feed(page.text)
+        assert parser.token
+        data = {"email": "admin@test.local", "password": "admin12345"}
+        rejected = raw.post("/login", data=data)
+        assert rejected.status_code == 403
+        assert "CSRF" in rejected.json()["detail"]
+        accepted = raw.post(
+            "/login", data={**data, "csrf_token": parser.token}, follow_redirects=False
+        )
+        assert accepted.status_code == 303
+        assert accepted.headers["location"] == "/"
+        assert raw.get("/").status_code == 200
+    finally:
+        raw.close()
+        configured.close()
 
 
 def test_markdown_preview_endpoint(tmp_path: Path):
@@ -204,7 +307,12 @@ def test_book_detail_rewrites_asset_urls_and_serves_assets(tmp_path: Path):
 
     asset_response = client.get("/books/1/assets/cover.svg?branch=main")
     assert asset_response.status_code == 200
-    assert asset_response.headers["content-type"].startswith("image/svg+xml")
+    # Active SVG content must download, never execute in the app's origin.
+    assert asset_response.headers["content-type"] == "application/octet-stream"
+    assert asset_response.headers["content-disposition"].startswith("attachment;")
+    assert "cover.svg" in asset_response.headers["content-disposition"]
+    assert asset_response.headers["x-content-type-options"] == "nosniff"
+    assert b"<svg" in asset_response.content
 
 
 def test_preview_endpoint_builds_paginated_preview_with_book_assets(tmp_path: Path):
@@ -246,6 +354,8 @@ def test_editor_shows_asset_library_and_snippets(tmp_path: Path):
     assert "Se guardarán con este material" in response.text
     assert "Version activa" in response.text
     assert "Edición directa" not in response.text
+    if "Insertar en el documento" not in response.text:
+        (tmp_path / "editor-response.html").write_text(response.text, encoding="utf-8")
     assert "Insertar en el documento" in response.text
     assert "2 columnas" in response.text
     assert "Lectura" in response.text
@@ -318,7 +428,13 @@ def test_editor_save_persists_uploaded_assets_in_repository(tmp_path: Path):
 
         asset_response = client.get("/books/1/assets/mi-imagen.png?branch=main")
         assert asset_response.status_code == 200
-        assert asset_response.content == TEST_PNG
+        assert asset_response.headers["content-type"].startswith("image/png")
+        assert asset_response.headers["x-content-type-options"] == "nosniff"
+        # Uploads are deliberately decoded/re-encoded to strip unsafe metadata.
+        with Image.open(BytesIO(asset_response.content)) as saved, Image.open(BytesIO(TEST_PNG)) as original:
+            saved.load()
+            assert saved.size == original.size
+            assert saved.convert("RGB").tobytes() == original.convert("RGB").tobytes()
 
 
 def test_editor_save_generates_commit_message_when_empty(tmp_path: Path):
@@ -401,6 +517,27 @@ def test_pdf_export_includes_embedded_images(tmp_path: Path):
         assert b"/Subtype /Image" in response.content
 
 
+def test_pdf_export_replaces_corrupt_raster_with_placeholder(tmp_path: Path):
+    from pypdf import PdfReader
+
+    client = build_client(tmp_path)
+    asset = tmp_path / "repo/books/primaria/lengua/lengua-demo/assets/aula.png"
+    asset.write_bytes(BROKEN_RASTER_PNG)
+    from scripts.journey_support import snapshot_example_repo
+
+    snapshot_example_repo(tmp_path / "repo")
+    client.post("/login", data={"email": "admin@test.local", "password": "admin12345"})
+    response = client.get("/books/1/export/pdf?branch=main")
+    assert response.status_code == 200
+    reader = PdfReader(BytesIO(response.content))
+    text = "\n".join(page.extract_text() for page in reader.pages)
+    assert "Imagen no disponible (Actividad)" in text
+    assert "no se pudo leer o decodificar el archivo" in text
+    assert "SVG no admitido" in text
+    assert str(tmp_path) not in text
+    assert not any(page.images for page in reader.pages)
+
+
 def test_comment_can_be_deleted_by_author(tmp_path: Path):
     client = build_client(tmp_path)
 
@@ -451,10 +588,16 @@ def test_public_book_edit_link_falls_back_to_teacher_branch(tmp_path: Path):
 
     response = client.get("/books/1/edit?branch=main")
     assert response.status_code == 200
-    assert "users/ana-profe" in response.text
+    from app.database import SessionLocal
+    from app.models import User
+
+    with SessionLocal() as db:
+        teacher = db.query(User).filter_by(email="ana@test.local").one()
+        assert f"users/id-{teacher.id}" in response.text
+    assert 'name="branch_name" value="main"' not in response.text
 
 
-def test_public_book_prefers_legacy_teacher_branch_when_repo_already_has_it(tmp_path: Path):
+def test_public_book_does_not_claim_legacy_branch_based_on_display_name(tmp_path: Path):
     client = build_client(tmp_path)
     with client:
         pass
@@ -500,7 +643,12 @@ def test_public_book_prefers_legacy_teacher_branch_when_repo_already_has_it(tmp_
 
     response = client.get("/books/1?workspace=personal")
     assert response.status_code == 200
-    assert 'href="/books/1/edit?branch=users/ana-profe"' in response.text
+    with SessionLocal() as db:
+        teacher = db.query(User).filter_by(email="ana-legacy@test.local").one()
+        assert f'href="/books/1/edit?branch=users/id-{teacher.id}/base/primaria"' in response.text
+    assert 'href="/books/1/edit?branch=users/ana-profe"' not in response.text
+    legacy_edit = client.get("/books/1/edit?branch=users/ana-profe")
+    assert legacy_edit.status_code == 403
 
 
 def test_register_redirects_to_github_when_github_login_is_enabled(tmp_path: Path, monkeypatch):
@@ -670,7 +818,9 @@ def test_login_accepts_legacy_bcrypt_hash_and_migrates_it(tmp_path: Path):
     try:
         admin = db.query(User).filter(User.email == "admin@test.local").first()
         assert admin is not None
-        assert admin.password_hash.startswith("$pbkdf2-sha256$")
+        # Startup must never reset an existing account's password, even when
+        # its stored hash is invalid. Recovery requires an explicit workflow.
+        assert admin.password_hash == "legacy-hash-without-scheme"
     finally:
         db.close()
 
@@ -752,7 +902,7 @@ def test_teacher_can_propose_and_org_admin_can_accept_school_course_version(tmp_
     )
     assert teacher_login.status_code == 200
 
-    teacher_branch = user_workspace_branch_name(type("UserLike", (), {"full_name": "Ana Profe", "email": "ana-flujo@test.local"})(), "colegio-flujo", "Primaria")
+    teacher_branch = user_workspace_branch_name(teacher, "colegio-flujo", "Primaria")
     approved_branch = approved_branch_name("colegio-flujo", "Primaria")
 
     save_response = client.post(
@@ -829,7 +979,7 @@ def test_teacher_can_propose_and_org_admin_can_accept_school_course_version(tmp_
         follow_redirects=True,
     )
     assert pr_response.status_code == 200
-    assert "Pull request registrada correctamente." in pr_response.text
+    assert "Propuesta de cambio enviada para revisión." in pr_response.text
 
     client.get("/logout", follow_redirects=True)
 

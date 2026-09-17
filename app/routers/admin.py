@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from slugify import slugify
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.config import get_settings
 from app.database import get_db
@@ -19,6 +20,14 @@ from app.templates import templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 settings = get_settings()
+
+
+def _commit(db: Session) -> None:
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Conflicto: registro duplicado o referencia no válida.") from exc
 
 
 def _ensure_org_manager(db: Session, user: User, organization_id: int) -> Organization:
@@ -85,7 +94,7 @@ def create_user(
         auth_provider="local",
     )
     db.add(user)
-    db.commit()
+    _commit(db)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -98,7 +107,7 @@ def create_organization(
 ):
     organization = Organization(name=name.strip(), slug=slugify(name), description=description.strip() or None)
     db.add(organization)
-    db.commit()
+    _commit(db)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -110,9 +119,11 @@ def create_membership(
     organization_id: int = Form(...),
     role: MembershipRole = Form(...),
 ):
+    if not db.get(User, user_id) or not db.get(Organization, organization_id):
+        raise HTTPException(400, "Usuario u organización no válidos.")
     membership = OrganizationMembership(user_id=user_id, organization_id=organization_id, role=role)
     db.add(membership)
-    db.commit()
+    _commit(db)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -169,7 +180,7 @@ def create_repository_source(
         is_public=is_public,
     )
     db.add(source)
-    db.commit()
+    _commit(db)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -220,7 +231,10 @@ def create_organization_membership(
         )
         .first()
     )
-    if not existing:
-        db.add(OrganizationMembership(user_id=user_id, organization_id=organization_id, role=role))
-        db.commit()
+    if existing:
+        raise HTTPException(409, "La membresía ya existe.")
+    if not db.get(User, user_id):
+        raise HTTPException(400, "Usuario no válido.")
+    db.add(OrganizationMembership(user_id=user_id, organization_id=organization_id, role=role))
+    _commit(db)
     return RedirectResponse(f"/admin/organizations/{organization_id}", status_code=303)

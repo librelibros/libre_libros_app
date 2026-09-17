@@ -1,50 +1,39 @@
-name: Keep Render service awake
+name: Public availability check
 
-# Render free duerme el servicio tras 15 min sin tráfico (cold start ~30-60s).
-# Mantenemos un GET /healthz periódico para evitarlo.
-#
-# CAVEAT: GitHub Actions cron es best-effort. La doc oficial dice que durante
-# picos de carga los schedules se saltan, y se confirma en los runs históricos
-# de este repo: con `*/10 * * * *` solo se dispararon 2 ejecuciones en 24h.
-# Por eso definimos varios schedules con offsets primos (en vez de minutos
-# múltiplos de 5/10 que sufren stampedes globales): aunque GitHub salte
-# alguno, otro debería llegar antes del límite de 15 min de Render.
-#
-# Para fiabilidad real (>99 %), configura ADEMÁS un monitor externo gratuito:
-#   - UptimeRobot (https://uptimerobot.com) → 50 monitors, ping cada 5 min.
-#   - cron-job.org → cron remoto cada 1 min.
-# Apuntando a https://libre-libros-app.onrender.com/healthz. Ver
-# docs/production-incident-workflow.md, sección "Keepalive de Render".
-
+# Hourly independent observation; the five-minute check runs in local Hermes.
+# Not an uptime guarantee: schedules may be delayed, dropped or disabled,
+# and Render quotas/restarts still apply. No redeploy or restart on failure.
+# Scheduled runs use the default branch; a feature-branch commit is not active.
 on:
   schedule:
-    - cron: '3,17 * * * *'    # min 3 y 17 — ventana de 14 min
-    - cron: '31,45 * * * *'   # min 31 y 45 — ventana de 14 min
-    - cron: '58 * * * *'      # respaldo cerca del fin de hora
+    - cron: '23 * * * *'
   workflow_dispatch:
 
+permissions: {}
+
+concurrency:
+  group: public-availability-check
+  cancel-in-progress: false
+
 jobs:
-  ping:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Ping /healthz
-        env:
-          PUBLIC_URL: https://libre-libros-app.onrender.com
+      - name: Check public liveness once
         run: |
           set -euo pipefail
-          # Si el servicio estaba dormido, la primera request lo despierta y
-          # puede tardar bastante. Damos hasta 90s al curl, y reintentamos 3
-          # veces antes de fallar.
-          for attempt in 1 2 3; do
-            echo "Attempt $attempt -> $PUBLIC_URL/healthz"
-            if curl -fsS -m 90 "$PUBLIC_URL/healthz"; then
-              echo
-              echo "OK"
-              exit 0
-            fi
-            echo "Attempt $attempt failed."
-            sleep 15
-          done
-          echo "All attempts failed — Render service unreachable." >&2
-          exit 1
+          response=$(mktemp)
+          trap 'rm -f "$response"' EXIT
+          if ! code=$(curl -sS --connect-timeout 10 --max-time 90 \
+            -o "$response" -w '%{http_code}' https://libre-libros-app.onrender.com/healthz); then
+            echo '::error::No HTTP response within deadline (cold start, network or outage possible)'
+            exit 1
+          fi
+          if [ "$code" != 200 ] || ! jq -e '.status == "ok"' "$response" > /dev/null 2>&1; then
+            echo "::error::Public liveness failed (HTTP $code); response body withheld"
+            exit 1
+          fi
+          echo 'Public liveness OK; database and authentication not checked'
+          echo '### Public healthcheck: OK' >> "$GITHUB_STEP_SUMMARY"
+          echo 'HTTP 200 and status=ok. This is not an uptime, database or login guarantee.' >> "$GITHUB_STEP_SUMMARY"
