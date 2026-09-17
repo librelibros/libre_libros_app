@@ -1,14 +1,19 @@
 name: Public availability check
 
-# Observation only, not a keepalive or uptime guarantee. An hourly request
-# allows Render Free to sleep; it may cause a cold start. Never bypass quotas.
-# GitHub schedules are best-effort and can be delayed, dropped or disabled.
+# Hourly independent observation; the five-minute check runs in local Hermes.
+# Not an uptime guarantee: schedules may be delayed, dropped or disabled,
+# and Render quotas/restarts still apply. No redeploy or restart on failure.
+# Scheduled runs use the default branch; a feature-branch commit is not active.
 on:
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions: {}
+
+concurrency:
+  group: public-availability-check
+  cancel-in-progress: false
 
 jobs:
   check:
@@ -30,3 +35,5 @@ jobs:
             exit 1
           fi
           echo 'Public liveness OK; database and authentication not checked'
+          echo '### Public healthcheck: OK' >> "$GITHUB_STEP_SUMMARY"
+          echo 'HTTP 200 and status=ok. This is not an uptime, database or login guarantee.' >> "$GITHUB_STEP_SUMMARY"
