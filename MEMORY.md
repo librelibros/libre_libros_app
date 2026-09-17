@@ -71,4 +71,13 @@
 - Finalizar wiring CSRF frontend y verificar invitación→edición/importación→guardado→propuesta→revisión→PDF→logout en demo nueva y aislada. La demo anterior no demuestra los cambios auth actuales.
 - Validación PM independiente y revisión A/B simulada pendientes; revisión humana futura no ejecutada.
 - Revisar investigación curricular y licencias con un revisor distinto del autor antes de editar índices definitivos o libros; luego revisión simulada por curso/materia y por unidad/ejercicio.
-- No push, despliegue ni contactos externos. Cambios locales todavía pendientes de commits por hitos.
+- La restricción inicial de push/despliegue fue sustituida por autorización posterior del propietario (véase registro de producción). No se han autorizado ni realizado contactos con entidades docentes.
+
+## Limpieza y adopción — 2026-09-17
+- Petición posterior: limpiar también contenido y subir lo necesario; manual sencillo y propuesta de comunicación con vías de piloto alojado, autoalojamiento y contribuciones.
+- Contenido: `main` y `improve/pilot-content` subidos a `219c78c`, incluidos el estudio curricular y 30 índices de `6955ad4`. Son documentación provisional, no libros completos ni validación normativa/docente. Los libros originales no se modificaron.
+- Retirados capturas, imágenes, PDF y JSON del laboratorio antes de commitearlos. Copia local de 23 archivos en `/tmp/opencode/figure-lab-backup-20260917/` (temporal, no backup duradero). Solo se publican README y dos informes de figuras. Servidor temporal del puerto 8095 detenido.
+- Prueba Muse: PDF real de cuatro páginas, dos imágenes y originales intactos según verificación registrada. Derechos sin resolver; la imagen no se publica. Revisión automatizada, no docente; quedan pendientes las nueve portadas y las comprobaciones web/PDF/impresión.
+- Añadidas `docs/guia-adopcion.md` y `docs/asociaciones-y-contacto.md`, enlazadas desde README. Botones de guardado contrastados con plantillas; enlaces locales comprobados. Fuentes oficiales leídas para SMPM, Acción Educativa, FESPM y Wikimedia España; encaje propuesto, ningún contacto ejecutado.
+- Esta entrega es documental: no se ha repetido la suite de aplicación ni certificado un nuevo despliegue. Siguen pendientes invitación real, concurrencia B04, alerta real de Telegram y validación humana.
+- Clave temporal OpenRouter expuesta anteriormente: debe revocarse; no se incluye en documentación ni commits.

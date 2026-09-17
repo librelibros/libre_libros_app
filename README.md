@@ -13,6 +13,12 @@ Libre Libros es un MVP para crear, adaptar y revisar libros de texto colaborativ
 - Flujo de comentarios, issues y pull requests
 - Dockerfile, `docker-compose.yml` y `.env.example`
 
+## Primeros pasos y participación
+
+- [Guía sencilla: probar, autoalojar o contribuir](docs/guia-adopcion.md)
+- [A quién presentarlo y mensaje de contacto](docs/asociaciones-y-contacto.md)
+- [Plan detallado y condiciones del piloto](docs/pilot-communication-plan.md)
+
 ## Arquitectura
 
 - `app/main.py`: arranque de FastAPI
