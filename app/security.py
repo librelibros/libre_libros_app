@@ -60,11 +60,7 @@ async def verify_csrf(request: Request) -> None:
     if settings.csrf_check_origin:
         source = request.headers.get("origin") or request.headers.get("referer")
         if source:
-            # `null` is the Fetch-spec opaque origin sentinel, sent by
-            # sandboxed iframes and file:// contexts. Never a same-origin
-            # request; only an explicit local toggle may tolerate it.
-            if settings.csrf_allow_null_origin and source == "null" and not request.headers.get("referer"):
-                return
+            # Opaque origins are not trusted, including in local demos.
             try:
                 allowed = {_origin(settings.public_base_url or str(request.base_url))}
                 allowed.update(_origin(value) for value in settings.csrf_allowed_origins)
@@ -98,5 +94,13 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         if request.url.path.startswith(("/invite", "/admin/invitations", "/login", "/register")):
             response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
+            # Login/register contain no URL secrets. Preserve same-origin form
+            # origins; Chromium can send Origin:null on POST under no-referrer.
+            # Invitation URLs retain no-referrer to protect their bearer token.
+            response.headers["Referrer-Policy"] = (
+                "no-referrer" if (
+                    request.url.path.startswith("/invite/")
+                    and request.url.path != "/invite/accept"
+                ) else "same-origin"
+            )
         return response

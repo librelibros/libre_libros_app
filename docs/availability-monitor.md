@@ -1,25 +1,43 @@
-# Monitor público de disponibilidad
+# Monitor de disponibilidad sin agente
 
-Actualización: 2026-09-17. Solicitado por el propietario como parte del despliegue gratuito.
+`scripts/libre_libros_healthcheck.py` es un script determinista para un trabajo Hermes `--no-agent`. No invoca Hermes, LLM, navegador, Telegram ni acciones de recuperación. Su stdout está pensado para el **destino local de Hermes**; no demuestra entrega a otros canales. Esta implementación no instala ni modifica cron.
 
-Hermes ejecuta `scripts/libre_libros_healthcheck.py` cada cinco minutos (`*/5 * * * *`) en modo `--no-agent`, sin tokens LLM ni navegador. Job creado: `735bc23f4712` (`libre-libros-healthcheck`), script instalado en `/data/agents/hermes/scripts/libre_libros_healthcheck.py`. Entrega y fallos locales: no envía avisos a Telegram. Gateway activo comprobado. La prueba manual del script falló por timeout; DNS resolvió, una petición de control a example.com respondió 200, pero tanto `/` como `/healthz` de Render agotaron el plazo. Cron instalado no equivale a web disponible ni a despliegue actualizado.
+## Comprobaciones punto a punto
 
-`.github/workflows/keepalive.yml` conserva una comprobación independiente cada hora para evitar duplicar 288 jobs diarios de Actions. Consulta `https://libre-libros-app.onrender.com/healthz`. Requiere HTTP 200 y JSON `status=ok`. No usa secretos, no imprime cuerpos, no modifica datos ni reinicia/despliega ante fallos. Límite de petición: 90 segundos; job: tres minutos; ejecuciones serializadas. Ejecución manual disponible en Actions.
+Una petición GET por endpoint, secuencial, al origen fijo `https://libre-libros-app.onrender.com`:
 
-## Activación
+1. `/healthz`: HTTP 200 y objeto JSON con `status: "ok"`.
+2. `/healthz/db`: HTTP 200 y objeto JSON con `status: "ok"` y `db: "ok"`.
 
-- El workflow programado debe estar en la rama predeterminada (`main`), y Actions habilitado. Un commit en una rama de trabajo no activa el cron.
-- Revisar ejecución manual y después una programada en Actions. Fallos quedan visibles allí; notificaciones por email dependen de las preferencias de GitHub, no se han configurado alertas externas.
-- Es independiente de `deploy-to-render.yml`: este último utiliza secretos almacenados en GitHub (no es necesario descargarlos al entorno local), exige CI correcto, rama main y variable `ENABLE_RENDER_DEPLOY=true`, además de las protecciones del entorno production.
+Sin redirects ni reintentos. Cada endpoint tiene límite de 60 segundos (socket y reloj de pared mediante SIGALRM). El plazo global es de 145 segundos, inferior al presupuesto de 150 segundos, incluyendo lectura/escritura de estado. Requiere Linux/POSIX y ejecución en el hilo principal. SIGALRM cubre DNS y streaming lento, no solo espera inicial del socket. No es garantía de tiempo real ante un proceso congelado o IO del kernel no interrumpible.
+
+Lee como máximo 4097 bytes por respuesta; rechaza cuerpos mayores de 4096. No imprime ni persiste cuerpos, cabeceras, URLs suministradas por respuestas ni mensajes de excepciones. El estado contiene únicamente códigos cerrados: `ok`, `http_error`, `timeout`, `network_error`, `body_too_large`, `invalid_json`, `unhealthy`.
+
+## Estado local y transiciones
+
+Por defecto mantiene un único resultado en `scripts/libre_libros_healthcheck.state.json`. Puede seleccionarse otro archivo mediante `LIBRE_LIBROS_HEALTHCHECK_STATE_PATH`. El directorio debe existir y ser escribible por el usuario del trabajo. No usar un directorio publicado por HTTP ni una ruta a credenciales. El script no carga dotenv.
+
+El JSON, limitado a 4096 bytes, incluye versión, fecha UTC (`checked_at`), estados de ambos endpoints, `consecutive_failures`, `alerted` y `transition` (`alert`, `recovered` o null). Se reemplaza atómicamente mediante un temporal hermano con permisos privados; no conserva historial ni temporales tras una ejecución normal. El contador se satura en un millón para mantener tamaño acotado.
+
+- Ambos endpoints correctos: exit 0 y stdout vacío.
+- Uno o ambos fallan: exit 1 y diagnóstico breve fijo en stderr.
+- **Tercer fallo consecutivo**: una línea de alerta en stdout y `transition: "alert"`.
+- Fallos posteriores: stdout vacío; el contador continúa.
+- Recuperación **después de alertar**: una línea en stdout, contador cero y `transition: "recovered"`.
+- Recuperación tras uno o dos fallos: silenciosa.
+
+Archivo ausente significa primera ejecución. Estado corrupto, demasiado grande, inconsistente o ilegible produce exit 1 y stderr explícito: no se sobrescribe ni se reinician silenciosamente los contadores, y no se consulta la red hasta resolverlo. Un error de escritura también produce exit 1 y no anuncia una transición que no se ha persistido. Un plazo global agotado no promete persistencia nueva; revisar la fecha del último resultado.
+
+Ejecutar **un solo trabajo a la vez por archivo**: no hay bloqueo entre procesos. El planificador debe evitar solapamientos y espaciar ejecuciones más que el presupuesto global. El estado y stdout no constituyen una cola de entrega fiable: una interrupción entre persistir y emitir puede perder una notificación. Verificar por separado cómo Hermes registra exit 1 y trata stdout de un trabajo fallido; no se ha probado esa integración ni la entrega local.
 
 ## Límites
 
-Render Free suspende por inactividad tras 15 minutos sin tráfico y concede 750 horas por workspace/mes. Las peticiones pueden reducir el reposo por inactividad, pero no evitan cuotas, reinicios o suspensiones del proveedor. GitHub schedules son best-effort, pueden retrasarse o desactivarse (en repos públicos, por inactividad del repositorio). La frecuencia solicitada no es una frecuencia de ejecución garantizada. Hermes realiza 288 comprobaciones diarias sin LLM; depende de que el servidor y gateway estén activos. Actions conserva 24 comprobaciones diarias; revisar consumo/límites, especialmente en repositorios privados. No contratar capacidad adicional sin autorización.
+Esto **no es E2E**: no prueba login, invitaciones, editor, guardado Git, comentarios, propuestas ni exportación PDF. Una respuesta saludable no prueba que esos recorridos funcionen. Tampoco evita todas las pausas de alojamiento, suspensión, indisponibilidad de red o BD. No reinicia, despliega ni mantiene artificialmente activo el servicio como garantía. No recoge secretos ni lee configuración de producción.
 
-Un healthcheck satisfactorio no prueba acceso a la BD, login, persistencia de materiales ni exportación PDF. La publicación exige comprobaciones funcionales separadas.
+## Validación hermética
 
-Referencias: https://render.com/docs/free y https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+```sh
+.venv/bin/python -m pytest tests/test_availability_monitor.py -q
+```
 
-## Evidencia local
-
-YAML parseado y script validado con `bash -n`; contrato de `/healthz` contrastado con `app/main.py`. No se ha ejecutado aún este workflow en GitHub. `git ls-remote` confirmó acceso de lectura por SSH y main remoto en `69e3f5b`; no acredita permiso de push ni acceso a configuración de Actions. La última comprobación pública anterior agotó 90 segundos sin respuesta; no se certifica disponibilidad.
+Los tests inyectan un opener simulado y archivos temporales: éxito, fallo BD, JSON inesperado, timeout, cuerpo grande, redirect rechazado, estado corrupto, error de persistencia, tercer fallo y recuperación. No ejecutar el script directamente para esta validación: su entrada CLI sí consulta el origen configurado. No se invocan Hermes ni servicios externos.

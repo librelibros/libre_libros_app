@@ -200,7 +200,7 @@ def test_origin_policy_and_multipart_header(client):
     assert response.status_code == 303
 
 
-def test_null_origin_rejected_by_default_and_tolerated_only_locally(client):
+def test_null_origin_rejected_without_demo_bypass(client):
     from app.config import get_settings
     token = csrf(client)
     settings = get_settings()
@@ -208,10 +208,10 @@ def test_null_origin_rejected_by_default_and_tolerated_only_locally(client):
     headers = {"X-CSRF-Token": token, "Origin": "null"}
     assert client.post("/login", data={"email": "admin@test.local", "password": "admin12345"},
                        headers=headers).status_code == 403
-    # Explicit local demo toggle, only when no Referer accompanies it.
-    settings.csrf_allow_null_origin = True
-    assert client.post("/login", data={"email": "admin@test.local", "password": "admin12345"},
-                       headers=headers).status_code == 303
+    # There is no demo bypass: same-origin forms remain subject to tokens.
+    assert not hasattr(settings, "csrf_allow_null_origin")
+    response = client.get("/login")
+    assert response.headers["referrer-policy"] == "same-origin"
     # A Referer alongside Origin:null is still an attacker-replay signature.
     replay = client.post("/login", data={"email": "admin@test.local", "password": "admin12345"},
                          headers={**headers, "Referer": "http://testserver/"})

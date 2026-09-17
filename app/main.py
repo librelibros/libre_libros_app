@@ -141,6 +141,7 @@ def healthz_db():
     try:
         with engine.connect() as conn:
             conn.execute(text("select 1"))
-    except Exception as exc:
-        return JSONResponse({"status": "error", "db": str(exc)[:200]}, status_code=503)
+    except Exception:
+        # Public readiness must never expose connection strings or DB errors.
+        return JSONResponse({"status": "error", "db": "unavailable"}, status_code=503)
     return {"status": "ok", "db": "ok"}

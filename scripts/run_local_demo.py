@@ -26,10 +26,7 @@ def main():
                     admin_name="Coordinación del piloto", secret_key=secrets.token_hex(32))
     env.update({"LIBRE_LIBROS_INVITATION_ONLY": "true",
                 "LIBRE_LIBROS_APP_NAME": "Libre Libros · Demo local",
-                "LIBRE_LIBROS_PUBLIC_BASE_URL": f"http://127.0.0.1:{args.port}",
-                # Local browsers emit the opaque `Origin: null` sentinel; this
-                # demo-only tolerance never ships to production deployments.
-                "LIBRE_LIBROS_CSRF_ALLOW_NULL_ORIGIN": "true"})
+                "LIBRE_LIBROS_PUBLIC_BASE_URL": f"http://127.0.0.1:{args.port}"})
     credentials = output / "demo-access.txt"
     descriptor = os.open(credentials, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:

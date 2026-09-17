@@ -34,10 +34,6 @@ class Settings(BaseSettings):
     invitation_max_per_hour: int = Field(default=30, ge=1)
     csrf_enabled: bool = True
     csrf_check_origin: bool = True
-    # Demo/local-only: browsers send the opaque sentinel `Origin: null` from
-    # file:// or sandboxed contexts. Production must keep rejecting it
-    # (OWASP CSRF: sandboxed iframe sends Origin: null too).
-    csrf_allow_null_origin: bool = False
     csrf_require_origin: bool = False
     csrf_allowed_origins: list[str] = Field(default_factory=list)
     session_https_only: bool = False
